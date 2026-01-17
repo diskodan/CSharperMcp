@@ -187,4 +187,72 @@ public class RoslynServiceIntegrationTests
         methods.Should().Contain(m => m.Name == "Parse", because: "JObject should have Parse method");
         methods.Should().Contain(m => m.Name == "FromObject", because: "JObject should have FromObject method");
     }
+
+    [Test]
+    public async Task GetSymbolInfoAsync_ByName_ReturnsSystemStringInfo()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var symbolInfo = await _sut.GetSymbolInfoAsync(symbolName: "System.String");
+
+        // Assert
+        symbolInfo.Should().NotBeNull();
+        symbolInfo!.Name.Should().Be("String");
+        symbolInfo.Kind.Should().Be("NamedType");
+        symbolInfo.Namespace.Should().Be("System");
+        symbolInfo.Assembly.Should().Contain("System");
+    }
+
+    [Test]
+    public async Task GetSymbolInfoAsync_ByName_ReturnsNuGetTypeInfo()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithNuGet"), "SolutionWithNuGet.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var symbolInfo = await _sut.GetSymbolInfoAsync(symbolName: "Newtonsoft.Json.Linq.JObject");
+
+        // Assert
+        symbolInfo.Should().NotBeNull();
+        symbolInfo!.Name.Should().Be("JObject");
+        symbolInfo.Kind.Should().Be("NamedType");
+        symbolInfo.Namespace.Should().Be("Newtonsoft.Json.Linq");
+        symbolInfo.Assembly.Should().Be("Newtonsoft.Json");
+    }
+
+    [Test]
+    public async Task GetSymbolInfoAsync_ByLocation_ReturnsMethodInfo()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get symbol at Calculator.cs line 5 (the Add method)
+        var symbolInfo = await _sut.GetSymbolInfoAsync(filePath: "Calculator.cs", line: 5, column: 16);
+
+        // Assert
+        symbolInfo.Should().NotBeNull();
+        symbolInfo!.Name.Should().Be("Add");
+        symbolInfo.Kind.Should().Be("Method");
+        symbolInfo.ContainingType.Should().Contain("Calculator");
+        symbolInfo.Signature.Should().Contain("int");
+    }
+
+    [Test]
+    public async Task GetSymbolInfoAsync_WithInvalidLocation_ReturnsNull()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var symbolInfo = await _sut.GetSymbolInfoAsync(filePath: "NonExistent.cs", line: 1, column: 1);
+
+        // Assert
+        symbolInfo.Should().BeNull();
+    }
 }
