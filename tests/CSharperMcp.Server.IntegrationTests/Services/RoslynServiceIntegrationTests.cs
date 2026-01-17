@@ -146,4 +146,45 @@ public class RoslynServiceIntegrationTests
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*not initialized*");
     }
+
+    [Test]
+    public async Task GetDiagnosticsAsync_WithNuGetSolution_CompilesCleanly()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithNuGet"), "SolutionWithNuGet.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - get errors (should be none)
+        var diagnostics = (await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Error)).ToList();
+
+        // Assert - SolutionWithNuGet should compile cleanly with NuGet references resolved
+        diagnostics.Should().BeEmpty(because: "SolutionWithNuGet has no errors when NuGet packages are resolved");
+    }
+
+    [Test]
+    public async Task CanResolveSymbolsFromNuGetPackage()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithNuGet"), "SolutionWithNuGet.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - get the compilation and verify we can find JObject type from Newtonsoft.Json
+        var project = _workspaceManager.CurrentSolution!.Projects.First();
+        var compilation = await project.GetCompilationAsync();
+
+        // Assert
+        compilation.Should().NotBeNull();
+
+        // Verify we can resolve the JObject type from Newtonsoft.Json
+        var jObjectType = compilation!.GetTypeByMetadataName("Newtonsoft.Json.Linq.JObject");
+        jObjectType.Should().NotBeNull(because: "JObject type should be resolvable from NuGet package");
+
+        // Verify it's from the correct assembly
+        jObjectType!.ContainingAssembly.Name.Should().Be("Newtonsoft.Json");
+
+        // Verify we can access type members
+        var methods = jObjectType.GetMembers().OfType<Microsoft.CodeAnalysis.IMethodSymbol>().ToList();
+        methods.Should().Contain(m => m.Name == "Parse", because: "JObject should have Parse method");
+        methods.Should().Contain(m => m.Name == "FromObject", because: "JObject should have FromObject method");
+    }
 }

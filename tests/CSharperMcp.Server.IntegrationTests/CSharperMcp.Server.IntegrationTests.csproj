@@ -31,6 +31,10 @@
     <Content Include="Fixtures\**\*" Exclude="Fixtures\**\obj\**;Fixtures\**\bin\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- For NuGet fixture, include obj/project.assets.json so MSBuildWorkspace can resolve packages -->
+    <Content Include="Fixtures\SolutionWithNuGet\**\obj\project.assets.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <!-- Exclude .cs files from Fixtures from being compiled -->
     <Compile Remove="Fixtures\**\*.cs" />
   </ItemGroup>

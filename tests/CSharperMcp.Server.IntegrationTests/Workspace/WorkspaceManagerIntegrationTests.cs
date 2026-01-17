@@ -100,4 +100,26 @@ public class WorkspaceManagerIntegrationTests
         projectCount.Should().Be(1);
         _sut.CurrentSolution.Should().NotBeNull();
     }
+
+    [Test]
+    public async Task InitializeAsync_WithSolutionWithNuGet_LoadsSuccessfully()
+    {
+        // Arrange - SolutionWithNuGet references Newtonsoft.Json NuGet package
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithNuGet"), "SolutionWithNuGet.sln");
+
+        // Act
+        var (success, message, projectCount) = await _sut.InitializeAsync(solutionPath);
+
+        // Assert
+        success.Should().BeTrue(because: $"initialization should succeed: {message}");
+        projectCount.Should().Be(1, because: "SolutionWithNuGet has exactly one project");
+        _sut.IsInitialized.Should().BeTrue();
+        _sut.CurrentSolution.Should().NotBeNull();
+
+        // Verify the project loaded its NuGet reference
+        var project = _sut.CurrentSolution!.Projects.First();
+        project.MetadataReferences.Should().Contain(r =>
+            r.Display != null && r.Display.Contains("Newtonsoft.Json"),
+            because: "project should have Newtonsoft.Json assembly reference");
+    }
 }
