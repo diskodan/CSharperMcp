@@ -419,4 +419,89 @@ public class RoslynServiceIntegrationTests
         definition.Line.Should().Be(3); // Calculator class starts at line 3
         definition.Assembly.Should().Be("SimpleProject");
     }
+
+    [Test]
+    public async Task GetTypeMembersAsync_ForWorkspaceType_ReturnsFullSourceCode()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get full definition of Calculator class
+        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator");
+
+        // Assert - Should return complete source code with all methods
+        typeMembers.Should().NotBeNull();
+        typeMembers!.IsFromWorkspace.Should().BeTrue();
+        typeMembers.FilePath.Should().EndWith("Calculator.cs");
+        typeMembers.TypeName.Should().Be("Calculator");
+        typeMembers.Namespace.Should().Be("SimpleProject");
+        typeMembers.Assembly.Should().Be("SimpleProject");
+        typeMembers.SourceCode.Should().NotBeNullOrEmpty();
+        typeMembers.SourceCode.Should().Contain("public class Calculator");
+        typeMembers.SourceCode.Should().Contain("public int Add");
+        typeMembers.SourceCode.Should().Contain("public int Subtract");
+        typeMembers.SourceCode.Should().Contain("public int Multiply");
+        typeMembers.SourceCode.Should().Contain("public double Divide");
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_ForBclType_ReturnsDecompiledSource()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get full definition of System.Console
+        var typeMembers = await _sut.GetTypeMembersAsync("System.Console");
+
+        // Assert - Should return decompiled source with members
+        typeMembers.Should().NotBeNull();
+        typeMembers!.IsFromWorkspace.Should().BeFalse();
+        typeMembers.FilePath.Should().BeNull();
+        typeMembers.TypeName.Should().Be("Console");
+        typeMembers.Namespace.Should().Be("System");
+        typeMembers.Assembly.Should().Contain("System");
+        typeMembers.SourceCode.Should().NotBeNullOrEmpty();
+        typeMembers.SourceCode.Should().Contain("class Console");
+        typeMembers.SourceCode.Should().Contain("WriteLine");
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_ForNuGetType_ReturnsDecompiledSource()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithNuGet"), "SolutionWithNuGet.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get full definition of JObject from Newtonsoft.Json
+        var typeMembers = await _sut.GetTypeMembersAsync("Newtonsoft.Json.Linq.JObject");
+
+        // Assert - Should return decompiled source with all members
+        typeMembers.Should().NotBeNull();
+        typeMembers!.IsFromWorkspace.Should().BeFalse();
+        typeMembers.FilePath.Should().BeNull();
+        typeMembers.TypeName.Should().Be("JObject");
+        typeMembers.Namespace.Should().Be("Newtonsoft.Json.Linq");
+        typeMembers.Assembly.Should().Be("Newtonsoft.Json");
+        typeMembers.Package.Should().Be("Newtonsoft.Json");
+        typeMembers.SourceCode.Should().NotBeNullOrEmpty();
+        typeMembers.SourceCode.Should().Contain("JObject");
+        typeMembers.SourceCode.Should().Contain("Parse");
+        typeMembers.SourceCode.Should().Contain("FromObject");
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_WithInvalidType_ReturnsNull()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var typeMembers = await _sut.GetTypeMembersAsync("NonExistent.Type");
+
+        // Assert
+        typeMembers.Should().BeNull();
+    }
 }

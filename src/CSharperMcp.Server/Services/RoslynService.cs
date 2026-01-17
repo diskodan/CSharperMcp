@@ -456,4 +456,148 @@ internal class RoslynService
             return DefinitionInfo.FromDecompiledSource(decompiledSource, assembly.Name, package);
         }
     }
+
+    public async Task<TypeMembersInfo?> GetTypeMembersAsync(
+        string typeName,
+        bool includeInherited = false)
+    {
+        if (_workspaceManager.CurrentSolution == null)
+        {
+            throw new InvalidOperationException("Workspace not initialized");
+        }
+
+        ITypeSymbol? typeSymbol = null;
+
+        // Look up the type by fully qualified name
+        foreach (var project in _workspaceManager.CurrentSolution.Projects)
+        {
+            var compilation = await project.GetCompilationAsync();
+            if (compilation == null) continue;
+
+            typeSymbol = compilation.GetTypeByMetadataName(typeName);
+            if (typeSymbol != null) break;
+        }
+
+        if (typeSymbol == null)
+        {
+            _logger.LogWarning("Type {TypeName} not found", typeName);
+            return null;
+        }
+
+        var ns = typeSymbol.ContainingNamespace?.ToDisplayString();
+        if (ns == "<global namespace>") ns = null;
+
+        var assembly = typeSymbol.ContainingAssembly;
+        var assemblyName = assembly?.Name;
+
+        // Check if type is in workspace source or DLL
+        var locations = typeSymbol.Locations;
+        if (locations.Length > 0 && locations[0].IsInSource)
+        {
+            // Type is in workspace - extract source code from syntax tree
+            var location = locations[0];
+            var syntaxTree = location.SourceTree;
+            if (syntaxTree == null)
+            {
+                _logger.LogWarning("Type {TypeName} has no syntax tree", typeName);
+                return null;
+            }
+
+            var root = await syntaxTree.GetRootAsync();
+            var node = root.FindNode(location.SourceSpan);
+
+            // Find the type declaration node (class, struct, interface, enum, record, delegate)
+            var typeDeclarationNode = node.AncestorsAndSelf()
+                .FirstOrDefault(n => n is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax ||
+                                     n is Microsoft.CodeAnalysis.CSharp.Syntax.DelegateDeclarationSyntax ||
+                                     n is Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax);
+
+            if (typeDeclarationNode == null)
+            {
+                _logger.LogWarning("Could not find type declaration node for {TypeName}", typeName);
+                return null;
+            }
+
+            var sourceCode = typeDeclarationNode.ToFullString();
+            var filePath = syntaxTree.FilePath;
+
+            return new TypeMembersInfo(
+                sourceCode,
+                typeSymbol.Name,
+                ns,
+                assemblyName,
+                null,
+                true,
+                filePath
+            );
+        }
+        else
+        {
+            // Type is in metadata (DLL) - decompile it
+            if (assembly == null)
+            {
+                _logger.LogWarning("Type {TypeName} has no containing assembly", typeName);
+                return null;
+            }
+
+            // Find assembly file path
+            string? assemblyPath = null;
+            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            {
+                var compilation = await project.GetCompilationAsync();
+                if (compilation == null) continue;
+
+                foreach (var reference in compilation.References)
+                {
+                    if (reference is Microsoft.CodeAnalysis.PortableExecutableReference peRef)
+                    {
+                        var refAssembly = compilation.GetAssemblyOrModuleSymbol(reference) as IAssemblySymbol;
+                        if (refAssembly?.Identity.Equals(assembly.Identity) == true)
+                        {
+                            assemblyPath = peRef.FilePath;
+                            break;
+                        }
+                    }
+                }
+
+                if (assemblyPath != null) break;
+            }
+
+            if (string.IsNullOrEmpty(assemblyPath))
+            {
+                _logger.LogWarning("Could not find assembly path for {Assembly}", assemblyName);
+                return null;
+            }
+
+            // Prepare type name for decompiler
+            var fullTypeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                .Replace("global::", "")
+                .Replace("<", "`")
+                .Split('`')[0];
+
+            var decompiledSource = _decompilerService.DecompileType(assemblyPath, fullTypeName);
+            if (decompiledSource == null)
+            {
+                _logger.LogWarning("Failed to decompile {TypeName} from {Assembly}", fullTypeName, assemblyPath);
+                return null;
+            }
+
+            // Determine package name
+            string? package = null;
+            if (assembly.Identity != null && !assembly.Identity.IsRetargetable)
+            {
+                package = assemblyName;
+            }
+
+            return new TypeMembersInfo(
+                decompiledSource,
+                typeSymbol.Name,
+                ns,
+                assemblyName,
+                package,
+                false,
+                null
+            );
+        }
+    }
 }
