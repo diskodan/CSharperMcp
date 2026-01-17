@@ -23,6 +23,7 @@ builder.Services.AddLogging(logging =>
 builder.Services.AddSingleton<WorkspaceManager>();
 builder.Services.AddSingleton<RoslynService>();
 builder.Services.AddSingleton<DecompilerService>();
+builder.Services.AddSingleton<CodeActionsService>();
 
 // Register MCP server with tools auto-discovered from this assembly
 builder.Services
