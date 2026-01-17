@@ -255,4 +255,76 @@ public class RoslynServiceIntegrationTests
         // Assert
         symbolInfo.Should().BeNull();
     }
+
+    [Test]
+    public async Task FindReferencesAsync_ByLocation_FindsAllUsages()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Find references to Calculator.Add method (defined at Calculator.cs line 5)
+        var references = (await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16)).ToList();
+
+        // Assert - Should find the definition + 3 usages in Program.cs
+        references.Should().NotBeEmpty();
+        references.Should().Contain(r => r.FilePath.EndsWith("Program.cs") && r.ContextSnippet.Contains("Add"));
+
+        // Should have at least 3 references in Program.cs (lines 9, 10, 11)
+        var programReferences = references.Where(r => r.FilePath.EndsWith("Program.cs")).ToList();
+        programReferences.Should().HaveCountGreaterOrEqualTo(3);
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_ByName_FindsTypeUsages()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Find references to Calculator type
+        var references = (await _sut.FindReferencesAsync(symbolName: "SimpleProject.Calculator")).ToList();
+
+        // Assert - Should find instantiation in Program.cs
+        references.Should().NotBeEmpty();
+        references.Should().Contain(r =>
+            r.FilePath.EndsWith("Program.cs") &&
+            r.ContextSnippet.Contains("Calculator"));
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_WithInvalidSymbol_ReturnsEmpty()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var references = (await _sut.FindReferencesAsync(filePath: "NonExistent.cs", line: 1, column: 1)).ToList();
+
+        // Assert
+        references.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_ReturnsLocationDetails()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var references = (await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16)).ToList();
+
+        // Assert
+        references.Should().NotBeEmpty();
+        references.Should().AllSatisfy(r =>
+        {
+            r.FilePath.Should().NotBeNullOrEmpty();
+            r.Line.Should().BeGreaterThan(0);
+            r.Column.Should().BeGreaterThan(0);
+            r.ContextSnippet.Should().NotBeNullOrEmpty();
+            r.ReferenceKind.Should().BeOneOf("Explicit", "Implicit");
+        });
+    }
 }

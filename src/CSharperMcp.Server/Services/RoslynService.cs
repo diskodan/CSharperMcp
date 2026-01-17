@@ -211,4 +211,98 @@ internal class RoslynService
 
         return modifiers;
     }
+
+    public async Task<IEnumerable<ReferenceInfo>> FindReferencesAsync(
+        string? filePath = null,
+        int? line = null,
+        int? column = null,
+        string? symbolName = null)
+    {
+        if (_workspaceManager.CurrentSolution == null)
+        {
+            throw new InvalidOperationException("Workspace not initialized");
+        }
+
+        ISymbol? symbol = null;
+
+        // Get symbol by location
+        if (filePath != null && line.HasValue && column.HasValue)
+        {
+            var document = FindDocument(filePath);
+            if (document == null)
+            {
+                _logger.LogWarning("Document not found: {FilePath}", filePath);
+                return Array.Empty<ReferenceInfo>();
+            }
+
+            var sourceText = await document.GetTextAsync();
+            var position = sourceText.Lines[line.Value - 1].Start + column.Value - 1;
+
+            var semanticModel = await document.GetSemanticModelAsync();
+            if (semanticModel == null) return Array.Empty<ReferenceInfo>();
+
+            var syntaxRoot = await document.GetSyntaxRootAsync();
+            if (syntaxRoot == null) return Array.Empty<ReferenceInfo>();
+
+            var node = syntaxRoot.FindToken(position).Parent;
+            if (node == null) return Array.Empty<ReferenceInfo>();
+
+            var symbolInfo = semanticModel.GetSymbolInfo(node);
+            symbol = symbolInfo.Symbol ?? semanticModel.GetDeclaredSymbol(node);
+        }
+        // Get symbol by fully qualified name
+        else if (!string.IsNullOrEmpty(symbolName))
+        {
+            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            {
+                var compilation = await project.GetCompilationAsync();
+                if (compilation == null) continue;
+
+                symbol = compilation.GetTypeByMetadataName(symbolName);
+                if (symbol != null) break;
+            }
+        }
+
+        if (symbol == null) return Array.Empty<ReferenceInfo>();
+
+        // Find all references
+        var references = await SymbolFinder.FindReferencesAsync(
+            symbol,
+            _workspaceManager.CurrentSolution);
+
+        var results = new List<ReferenceInfo>();
+
+        foreach (var reference in references)
+        {
+            foreach (var location in reference.Locations)
+            {
+                var doc = location.Document;
+                var sourceText = await doc.GetTextAsync();
+                var lineSpan = location.Location.GetLineSpan();
+
+                var startLine = lineSpan.StartLinePosition.Line + 1;
+                var startColumn = lineSpan.StartLinePosition.Character + 1;
+                var endLine = lineSpan.EndLinePosition.Line + 1;
+                var endColumn = lineSpan.EndLinePosition.Character + 1;
+
+                // Get context snippet (the line containing the reference)
+                var textLine = sourceText.Lines[lineSpan.StartLinePosition.Line];
+                var contextSnippet = textLine.ToString().Trim();
+
+                var referenceKind = location.IsImplicit ? "Implicit" : "Explicit";
+
+                results.Add(new ReferenceInfo(
+                    doc.FilePath ?? doc.Name,
+                    startLine,
+                    startColumn,
+                    endLine,
+                    endColumn,
+                    contextSnippet,
+                    referenceKind
+                ));
+            }
+        }
+
+        return results;
+    }
 }
