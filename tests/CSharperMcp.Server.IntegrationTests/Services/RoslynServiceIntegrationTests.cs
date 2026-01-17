@@ -11,7 +11,9 @@ public class RoslynServiceIntegrationTests
 {
     private Mock<ILogger<WorkspaceManager>> _workspaceLoggerMock = null!;
     private Mock<ILogger<RoslynService>> _roslynLoggerMock = null!;
+    private Mock<ILogger<DecompilerService>> _decompilerLoggerMock = null!;
     private WorkspaceManager _workspaceManager = null!;
+    private DecompilerService _decompilerService = null!;
     private RoslynService _sut = null!;
 
     [OneTimeSetUp]
@@ -28,8 +30,10 @@ public class RoslynServiceIntegrationTests
     {
         _workspaceLoggerMock = new Mock<ILogger<WorkspaceManager>>();
         _roslynLoggerMock = new Mock<ILogger<RoslynService>>();
+        _decompilerLoggerMock = new Mock<ILogger<DecompilerService>>();
         _workspaceManager = new WorkspaceManager(_workspaceLoggerMock.Object);
-        _sut = new RoslynService(_workspaceManager, _roslynLoggerMock.Object);
+        _decompilerService = new DecompilerService(_decompilerLoggerMock.Object);
+        _sut = new RoslynService(_workspaceManager, _decompilerService, _roslynLoggerMock.Object);
     }
 
     [TearDown]
@@ -326,5 +330,93 @@ public class RoslynServiceIntegrationTests
             r.ContextSnippet.Should().NotBeNullOrEmpty();
             r.ReferenceKind.Should().BeOneOf("Explicit", "Implicit");
         });
+    }
+
+    [Test]
+    public async Task GetDefinitionAsync_ForWorkspaceSymbol_ReturnsSourceLocation()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get definition at Calculator.Add method usage (Program.cs line 10)
+        var definition = await _sut.GetDefinitionAsync(filePath: "Program.cs", line: 10, column: 27);
+
+        // Assert - Should return source location of Add method in Calculator.cs
+        definition.Should().NotBeNull();
+        definition!.IsSourceLocation.Should().BeTrue();
+        definition.FilePath.Should().EndWith("Calculator.cs");
+        definition.Line.Should().Be(5); // Add method is on line 5 in Calculator.cs
+        definition.Column.Should().BeGreaterThan(0);
+        definition.Assembly.Should().Be("SimpleProject");
+    }
+
+    [Test]
+    public async Task GetDefinitionAsync_ForBclType_ReturnsDecompiledSource()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get definition for System.Console by name (used in Program.cs)
+        var definition = await _sut.GetDefinitionAsync(symbolName: "System.Console");
+
+        // Assert - Should return decompiled source from BCL
+        definition.Should().NotBeNull();
+        definition!.IsSourceLocation.Should().BeFalse();
+        definition.DecompiledSource.Should().NotBeNullOrEmpty();
+        definition.DecompiledSource.Should().Contain("class Console");
+        definition.Assembly.Should().Contain("System");
+    }
+
+    [Test]
+    public async Task GetDefinitionAsync_ForNuGetType_ReturnsDecompiledSource()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithNuGet"), "SolutionWithNuGet.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get definition for JObject from Newtonsoft.Json
+        var definition = await _sut.GetDefinitionAsync(symbolName: "Newtonsoft.Json.Linq.JObject");
+
+        // Assert - Should return decompiled source from NuGet package
+        definition.Should().NotBeNull();
+        definition!.IsSourceLocation.Should().BeFalse();
+        definition.DecompiledSource.Should().NotBeNullOrEmpty();
+        definition.DecompiledSource.Should().Contain("JObject");
+        definition.Assembly.Should().Be("Newtonsoft.Json");
+        definition.Package.Should().Be("Newtonsoft.Json");
+    }
+
+    [Test]
+    public async Task GetDefinitionAsync_WithInvalidSymbol_ReturnsNull()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var definition = await _sut.GetDefinitionAsync(filePath: "NonExistent.cs", line: 1, column: 1);
+
+        // Assert
+        definition.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetDefinitionAsync_ByLocation_ForUserType_ReturnsSourceLocation()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get definition for Calculator type at instantiation (Program.cs line 7)
+        var definition = await _sut.GetDefinitionAsync(filePath: "Program.cs", line: 7, column: 24);
+
+        // Assert - Should return source location of Calculator class
+        definition.Should().NotBeNull();
+        definition!.IsSourceLocation.Should().BeTrue();
+        definition.FilePath.Should().EndWith("Calculator.cs");
+        definition.Line.Should().Be(3); // Calculator class starts at line 3
+        definition.Assembly.Should().Be("SimpleProject");
     }
 }
