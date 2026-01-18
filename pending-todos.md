@@ -2,6 +2,8 @@
 
 Generated: 2026-01-18 | Updated: 2026-01-18
 
+> **📋 For detailed context to resume in a new session, see [SESSION-CONTEXT.md](SESSION-CONTEXT.md)**
+
 ## Completed Tasks ✅
 
 1. ✅ Convert methods to expression-bodied members where appropriate
