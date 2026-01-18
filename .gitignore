@@ -45,3 +45,6 @@ TestResults/
 
 # macOS
 .DS_Store
+
+# Serena AI agent memory
+.serena/
