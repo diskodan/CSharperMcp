@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
+using CSharperMcp.Server.Extensions;
 using CSharperMcp.Server.Workspace;
 
 namespace CSharperMcp.Server.Tools;
@@ -12,16 +14,16 @@ internal static class WorkspaceTool
     [Description("Initialize the C# workspace with a solution or project path. Call this before using other tools.")]
     public static async Task<WorkspaceInitResult> InitializeWorkspace(
         WorkspaceManager workspaceManager,
-        WorkspaceConfiguration config,
+        IOptions<WorkspaceConfiguration> config,
         ILogger<WorkspaceManager> logger,
         [Description("Absolute path to .sln, .csproj, or directory containing them")] string path)
     {
         // Don't allow re-initialization if workspace was auto-initialized
-        if (!string.IsNullOrEmpty(config.InitialWorkspacePath))
+        if (!config.Value.InitialWorkspacePath.IsNullOrEmpty())
         {
             return new WorkspaceInitResult(
                 Success: false,
-                Message: $"Workspace already initialized from --workspace parameter: {config.InitialWorkspacePath}. Restart server to change workspace.",
+                Message: $"Workspace already initialized from --workspace parameter: {config.Value.InitialWorkspacePath}. Restart server to change workspace.",
                 ProjectCount: 0
             );
         }

@@ -2,20 +2,15 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.Logging;
 using CSharperMcp.Server.Common;
+using CSharperMcp.Server.Extensions;
 
 namespace CSharperMcp.Server.Workspace;
 
-internal class WorkspaceManager : IDisposable
+internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
 {
-    private readonly ILogger<WorkspaceManager> _logger;
     private readonly List<string> _workspaceDiagnostics = [];
     private MSBuildWorkspace? _workspace;
     private Solution? _solution;
-
-    public WorkspaceManager(ILogger<WorkspaceManager> logger)
-    {
-        _logger = logger;
-    }
 
     public Solution? CurrentSolution => _solution;
     public bool IsInitialized => _solution != null;
@@ -25,7 +20,7 @@ internal class WorkspaceManager : IDisposable
         string path,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(path))
+        if (path.IsNullOrWhiteSpace())
         {
             return (false, "Path cannot be empty", 0);
         }
@@ -43,27 +38,27 @@ internal class WorkspaceManager : IDisposable
                 return (false, $"No .sln or .csproj found at {path}", 0);
             }
 
-            _logger.LogInformation("Loading solution from {Path}", solutionPath);
+            logger.LogInformation("Loading solution from {Path}", solutionPath);
             _solution = await _workspace.OpenSolutionAsync(solutionPath, cancellationToken: timeoutCts.Token);
 
             var projectCount = _solution.Projects.Count();
-            _logger.LogInformation("Successfully loaded solution with {Count} projects", projectCount);
+            logger.LogInformation("Successfully loaded solution with {Count} projects", projectCount);
 
             return (true, $"Loaded solution with {projectCount} projects", projectCount);
         }
         catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested)
         {
-            _logger.LogError("Workspace initialization timed out after {Timeout}", OperationTimeout.Long);
+            logger.LogError("Workspace initialization timed out after {Timeout}", OperationTimeout.Long);
             return (false, $"Operation timed out after {OperationTimeout.Long.TotalMinutes} minutes", 0);
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Workspace initialization was cancelled");
+            logger.LogInformation("Workspace initialization was cancelled");
             return (false, "Operation was cancelled", 0);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to initialize workspace");
+            logger.LogError(ex, "Failed to initialize workspace");
             return (false, ex.Message, 0);
         }
     }
@@ -111,7 +106,7 @@ internal class WorkspaceManager : IDisposable
     {
         var message = $"[{e.Diagnostic.Kind}] {e.Diagnostic.Message}";
         _workspaceDiagnostics.Add(message);
-        _logger.LogWarning("Workspace diagnostic: {Message}", message);
+        logger.LogWarning("Workspace diagnostic: {Message}", message);
     }
 
     public void Dispose()
