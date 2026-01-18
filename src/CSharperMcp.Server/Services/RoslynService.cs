@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
 using CSharperMcp.Server.Models;
 using CSharperMcp.Server.Workspace;
+using CSharperMcp.Server.Common;
 
 namespace CSharperMcp.Server.Services;
 
@@ -24,19 +25,25 @@ internal class RoslynService
         string? filePath = null,
         int? startLine = null,
         int? endLine = null,
-        DiagnosticSeverity minimumSeverity = DiagnosticSeverity.Warning)
+        DiagnosticSeverity minimumSeverity = DiagnosticSeverity.Warning,
+        CancellationToken cancellationToken = default)
     {
         if (_workspaceManager.CurrentSolution == null)
         {
-            throw new InvalidOperationException("Workspace not initialized");
+            throw new InvalidOperationException("Workspace not initialized. Call initialize_workspace first.");
         }
 
+        using var timeoutCts = OperationTimeout.CreateLinked(cancellationToken, OperationTimeout.Quick);
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var project in _workspaceManager.CurrentSolution.Projects)
+        try
         {
-            var compilation = await project.GetCompilationAsync();
-            if (compilation == null) continue;
+            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            {
+                timeoutCts.Token.ThrowIfCancellationRequested();
+
+                var compilation = await project.GetCompilationAsync(timeoutCts.Token);
+                if (compilation == null) continue;
 
             var projectDiagnostics = compilation.GetDiagnostics()
                 .Where(d => d.Severity >= minimumSeverity);
@@ -64,10 +71,26 @@ internal class RoslynService
                 });
             }
 
-            diagnostics.AddRange(projectDiagnostics);
-        }
+                diagnostics.AddRange(projectDiagnostics);
+            }
 
-        return diagnostics;
+            return diagnostics;
+        }
+        catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested)
+        {
+            _logger.LogError("GetDiagnostics timed out after {Timeout}", OperationTimeout.Quick);
+            throw new TimeoutException($"Operation timed out after {OperationTimeout.Quick.TotalSeconds} seconds");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("GetDiagnostics was cancelled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting diagnostics");
+            throw;
+        }
     }
 
     public async Task<Models.SymbolInfo?> GetSymbolInfoAsync(

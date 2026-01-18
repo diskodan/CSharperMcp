@@ -12,9 +12,20 @@ internal static class WorkspaceTool
     [Description("Initialize the C# workspace with a solution or project path. Call this before using other tools.")]
     public static async Task<WorkspaceInitResult> InitializeWorkspace(
         WorkspaceManager workspaceManager,
+        WorkspaceConfiguration config,
         ILogger<WorkspaceManager> logger,
         [Description("Absolute path to .sln, .csproj, or directory containing them")] string path)
     {
+        // Don't allow re-initialization if workspace was auto-initialized
+        if (!string.IsNullOrEmpty(config.InitialWorkspacePath))
+        {
+            return new WorkspaceInitResult(
+                Success: false,
+                Message: $"Workspace already initialized from --workspace parameter: {config.InitialWorkspacePath}. Restart server to change workspace.",
+                ProjectCount: 0
+            );
+        }
+
         try
         {
             logger.LogInformation("Initializing workspace at {Path}", path);
