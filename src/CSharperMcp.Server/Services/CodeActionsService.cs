@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
+using CSharperMcp.Server.Extensions;
 using CSharperMcp.Server.Models;
 using CSharperMcp.Server.Workspace;
 
@@ -12,11 +13,10 @@ namespace CSharperMcp.Server.Services;
 /// complex MEF composition and provider registration that's beyond the scope
 /// of an initial MCP server implementation.
 /// </summary>
-internal class CodeActionsService
+internal class CodeActionsService(
+    WorkspaceManager workspaceManager,
+    ILogger<CodeActionsService> logger)
 {
-    private readonly WorkspaceManager _workspaceManager;
-    private readonly ILogger<CodeActionsService> _logger;
-
     // Common fixable diagnostic IDs (this is a simplified subset)
     private static readonly Dictionary<string, string> _knownFixableDiagnostics = new()
     {
@@ -35,12 +35,6 @@ internal class CodeActionsService
         ["IDE0060"] = "Remove unused parameter",
     };
 
-    public CodeActionsService(WorkspaceManager workspaceManager, ILogger<CodeActionsService> logger)
-    {
-        _workspaceManager = workspaceManager;
-        _logger = logger;
-    }
-
     public async Task<IEnumerable<CodeActionInfo>> GetCodeActionsAsync(
         string? filePath = null,
         int? line = null,
@@ -49,7 +43,7 @@ internal class CodeActionsService
         int? endColumn = null,
         IEnumerable<string>? diagnosticIds = null)
     {
-        if (_workspaceManager.CurrentSolution == null)
+        if (workspaceManager.CurrentSolution == null)
         {
             throw new InvalidOperationException("Workspace not initialized");
         }
@@ -57,14 +51,14 @@ internal class CodeActionsService
         var actions = new List<CodeActionInfo>();
 
         // Find the document
-        if (string.IsNullOrEmpty(filePath))
+        if (filePath.IsNullOrEmpty())
         {
-            _logger.LogWarning("File path is required for getting code actions");
+            logger.LogWarning("File path is required for getting code actions");
             return actions;
         }
 
         Document? document = null;
-        foreach (var project in _workspaceManager.CurrentSolution.Projects)
+        foreach (var project in workspaceManager.CurrentSolution.Projects)
         {
             var doc = project.Documents.FirstOrDefault(d =>
                 d.FilePath?.EndsWith(filePath, StringComparison.OrdinalIgnoreCase) == true);
@@ -77,7 +71,7 @@ internal class CodeActionsService
 
         if (document == null)
         {
-            _logger.LogWarning("Document not found: {FilePath}", filePath);
+            logger.LogWarning("Document not found: {FilePath}", filePath);
             return actions;
         }
 
@@ -85,7 +79,7 @@ internal class CodeActionsService
         var semanticModel = await document.GetSemanticModelAsync();
         if (semanticModel == null)
         {
-            _logger.LogWarning("Could not get semantic model for {FilePath}", filePath);
+            logger.LogWarning("Could not get semantic model for {FilePath}", filePath);
             return actions;
         }
 
@@ -142,7 +136,7 @@ internal class CodeActionsService
         // This is complex and beyond the initial MCP server scope.
         // For now, we return diagnostic-based fixes only.
 
-        _logger.LogInformation("Found {Count} code actions at {FilePath}:{Line}", actions.Count, filePath, line);
+        logger.LogInformation("Found {Count} code actions at {FilePath}:{Line}", actions.Count, filePath, line);
         return actions;
     }
 }

@@ -6,8 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CSharperMcp.Server.IntegrationTests.Services;
 
-[TestFixture]
-public class RoslynServiceIntegrationTests
+internal class RoslynServiceIntegrationTests
 {
     private Mock<ILogger<WorkspaceManager>> _workspaceLoggerMock = null!;
     private Mock<ILogger<RoslynService>> _roslynLoggerMock = null!;

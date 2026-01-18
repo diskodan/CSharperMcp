@@ -2,8 +2,7 @@ using ModelContextProtocol.Client;
 
 namespace CSharperMcp.Server.IntegrationTests.McpServer;
 
-[TestFixture]
-public class WorkspaceParameterFilterTests
+internal class WorkspaceParameterFilterTests
 {
     [Test]
     public async Task ToolsList_WithWorkspaceParameter_HidesInitializeWorkspaceTool()

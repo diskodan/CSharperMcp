@@ -5,8 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CSharperMcp.Server.IntegrationTests.Services;
 
-[TestFixture]
-public class CodeActionsServiceIntegrationTests
+internal class CodeActionsServiceIntegrationTests
 {
     private Mock<ILogger<WorkspaceManager>> _workspaceLoggerMock = null!;
     private Mock<ILogger<CodeActionsService>> _codeActionsLoggerMock = null!;

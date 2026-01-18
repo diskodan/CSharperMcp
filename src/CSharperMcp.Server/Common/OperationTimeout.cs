@@ -25,9 +25,7 @@ internal static class OperationTimeout
     /// Creates a CancellationTokenSource with the specified timeout.
     /// </summary>
     public static CancellationTokenSource CreateWithTimeout(TimeSpan timeout)
-    {
-        return new CancellationTokenSource(timeout);
-    }
+        => new CancellationTokenSource(timeout);
 
     /// <summary>
     /// Links an external cancellation token with a timeout.

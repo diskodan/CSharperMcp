@@ -4,8 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CSharperMcp.Server.IntegrationTests.Workspace;
 
-[TestFixture]
-public class WorkspaceManagerIntegrationTests
+internal class WorkspaceManagerIntegrationTests
 {
     private Mock<ILogger<WorkspaceManager>> _loggerMock = null!;
     private WorkspaceManager _sut = null!;

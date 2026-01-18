@@ -5,15 +5,8 @@ using Microsoft.Extensions.Logging;
 
 namespace CSharperMcp.Server.Services;
 
-internal class DecompilerService
+internal class DecompilerService(ILogger<DecompilerService> logger)
 {
-    private readonly ILogger<DecompilerService> _logger;
-
-    public DecompilerService(ILogger<DecompilerService> logger)
-    {
-        _logger = logger;
-    }
-
     public string? DecompileType(string assemblyPath, string fullTypeName)
     {
         try
@@ -30,7 +23,7 @@ internal class DecompilerService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to decompile type {TypeName} from {Assembly}", fullTypeName, assemblyPath);
+            logger.LogError(ex, "Failed to decompile type {TypeName} from {Assembly}", fullTypeName, assemblyPath);
             return null;
         }
     }

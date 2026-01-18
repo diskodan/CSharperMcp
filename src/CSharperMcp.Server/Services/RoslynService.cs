@@ -4,24 +4,18 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
+using CSharperMcp.Server.Common;
+using CSharperMcp.Server.Extensions;
 using CSharperMcp.Server.Models;
 using CSharperMcp.Server.Workspace;
-using CSharperMcp.Server.Common;
 
 namespace CSharperMcp.Server.Services;
 
-internal class RoslynService
+internal class RoslynService(
+    WorkspaceManager workspaceManager,
+    DecompilerService decompilerService,
+    ILogger<RoslynService> logger)
 {
-    private readonly WorkspaceManager _workspaceManager;
-    private readonly DecompilerService _decompilerService;
-    private readonly ILogger<RoslynService> _logger;
-
-    public RoslynService(WorkspaceManager workspaceManager, DecompilerService decompilerService, ILogger<RoslynService> logger)
-    {
-        _workspaceManager = workspaceManager;
-        _decompilerService = decompilerService;
-        _logger = logger;
-    }
 
     public async Task<IEnumerable<Diagnostic>> GetDiagnosticsAsync(
         string? filePath = null,
@@ -30,7 +24,7 @@ internal class RoslynService
         DiagnosticSeverity minimumSeverity = DiagnosticSeverity.Warning,
         CancellationToken cancellationToken = default)
     {
-        if (_workspaceManager.CurrentSolution == null)
+        if (workspaceManager.CurrentSolution == null)
         {
             throw new InvalidOperationException("Workspace not initialized. Call initialize_workspace first.");
         }
@@ -40,7 +34,7 @@ internal class RoslynService
 
         try
         {
-            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            foreach (var project in workspaceManager.CurrentSolution.Projects)
             {
                 timeoutCts.Token.ThrowIfCancellationRequested();
 
@@ -73,7 +67,7 @@ internal class RoslynService
                     catch (Exception ex)
                     {
                         // Log but don't fail - analyzer diagnostics are nice-to-have
-                        _logger.LogWarning(ex, "Failed to get analyzer diagnostics for project {Project}", project.Name);
+                        logger.LogWarning(ex, "Failed to get analyzer diagnostics for project {Project}", project.Name);
                     }
                 }
 
@@ -83,7 +77,7 @@ internal class RoslynService
                     .Where(d => d.Severity >= minimumSeverity);
 
             // Filter by file if specified
-            if (!string.IsNullOrEmpty(filePath))
+            if (!filePath.IsNullOrEmpty())
             {
                 projectDiagnostics = projectDiagnostics.Where(d =>
                     d.Location.SourceTree?.FilePath?.EndsWith(filePath, StringComparison.OrdinalIgnoreCase) == true);
@@ -112,17 +106,17 @@ internal class RoslynService
         }
         catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested)
         {
-            _logger.LogError("GetDiagnostics timed out after {Timeout}", OperationTimeout.Quick);
+            logger.LogError("GetDiagnostics timed out after {Timeout}", OperationTimeout.Quick);
             throw new TimeoutException($"Operation timed out after {OperationTimeout.Quick.TotalSeconds} seconds");
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("GetDiagnostics was cancelled");
+            logger.LogInformation("GetDiagnostics was cancelled");
             throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting diagnostics");
+            logger.LogError(ex, "Error getting diagnostics");
             throw;
         }
     }
@@ -133,7 +127,7 @@ internal class RoslynService
         int? column = null,
         string? symbolName = null)
     {
-        if (_workspaceManager.CurrentSolution == null)
+        if (workspaceManager.CurrentSolution == null)
         {
             throw new InvalidOperationException("Workspace not initialized");
         }
@@ -146,7 +140,7 @@ internal class RoslynService
             var document = FindDocument(filePath);
             if (document == null)
             {
-                _logger.LogWarning("Document not found: {FilePath}", filePath);
+                logger.LogWarning("Document not found: {FilePath}", filePath);
                 return null;
             }
 
@@ -166,9 +160,9 @@ internal class RoslynService
             symbol = symbolInfo.Symbol ?? semanticModel.GetDeclaredSymbol(node);
         }
         // Get symbol by fully qualified name
-        else if (!string.IsNullOrEmpty(symbolName))
+        else if (!symbolName.IsNullOrEmpty())
         {
-            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            foreach (var project in workspaceManager.CurrentSolution.Projects)
             {
                 var compilation = await project.GetCompilationAsync();
                 if (compilation == null) continue;
@@ -185,9 +179,9 @@ internal class RoslynService
 
     private Document? FindDocument(string filePath)
     {
-        if (_workspaceManager.CurrentSolution == null) return null;
+        if (workspaceManager.CurrentSolution == null) return null;
 
-        foreach (var project in _workspaceManager.CurrentSolution.Projects)
+        foreach (var project in workspaceManager.CurrentSolution.Projects)
         {
             var doc = project.Documents.FirstOrDefault(d =>
                 d.FilePath?.EndsWith(filePath, StringComparison.OrdinalIgnoreCase) == true);
@@ -277,7 +271,7 @@ internal class RoslynService
         int? column = null,
         string? symbolName = null)
     {
-        if (_workspaceManager.CurrentSolution == null)
+        if (workspaceManager.CurrentSolution == null)
         {
             throw new InvalidOperationException("Workspace not initialized");
         }
@@ -290,7 +284,7 @@ internal class RoslynService
             var document = FindDocument(filePath);
             if (document == null)
             {
-                _logger.LogWarning("Document not found: {FilePath}", filePath);
+                logger.LogWarning("Document not found: {FilePath}", filePath);
                 return Array.Empty<ReferenceInfo>();
             }
 
@@ -310,9 +304,9 @@ internal class RoslynService
             symbol = symbolInfo.Symbol ?? semanticModel.GetDeclaredSymbol(node);
         }
         // Get symbol by fully qualified name
-        else if (!string.IsNullOrEmpty(symbolName))
+        else if (!symbolName.IsNullOrEmpty())
         {
-            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            foreach (var project in workspaceManager.CurrentSolution.Projects)
             {
                 var compilation = await project.GetCompilationAsync();
                 if (compilation == null) continue;
@@ -327,7 +321,7 @@ internal class RoslynService
         // Find all references
         var references = await SymbolFinder.FindReferencesAsync(
             symbol,
-            _workspaceManager.CurrentSolution);
+            workspaceManager.CurrentSolution);
 
         var results = new List<ReferenceInfo>();
 
@@ -371,7 +365,7 @@ internal class RoslynService
         int? column = null,
         string? symbolName = null)
     {
-        if (_workspaceManager.CurrentSolution == null)
+        if (workspaceManager.CurrentSolution == null)
         {
             throw new InvalidOperationException("Workspace not initialized");
         }
@@ -384,7 +378,7 @@ internal class RoslynService
             var document = FindDocument(filePath);
             if (document == null)
             {
-                _logger.LogWarning("Document not found: {FilePath}", filePath);
+                logger.LogWarning("Document not found: {FilePath}", filePath);
                 return null;
             }
 
@@ -404,10 +398,10 @@ internal class RoslynService
             symbol = symbolInfo.Symbol ?? semanticModel.GetDeclaredSymbol(node);
         }
         // Get symbol by fully qualified name
-        else if (!string.IsNullOrEmpty(symbolName))
+        else if (!symbolName.IsNullOrEmpty())
         {
-            _logger.LogInformation("Looking up symbol by name: {SymbolName}", symbolName);
-            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            logger.LogInformation("Looking up symbol by name: {SymbolName}", symbolName);
+            foreach (var project in workspaceManager.CurrentSolution.Projects)
             {
                 var compilation = await project.GetCompilationAsync();
                 if (compilation == null) continue;
@@ -415,14 +409,14 @@ internal class RoslynService
                 symbol = compilation.GetTypeByMetadataName(symbolName);
                 if (symbol != null)
                 {
-                    _logger.LogInformation("Found symbol {SymbolName} in project {ProjectName}", symbolName, project.Name);
+                    logger.LogInformation("Found symbol {SymbolName} in project {ProjectName}", symbolName, project.Name);
                     break;
                 }
             }
 
             if (symbol == null)
             {
-                _logger.LogWarning("Symbol {SymbolName} not found in any project", symbolName);
+                logger.LogWarning("Symbol {SymbolName} not found in any project", symbolName);
             }
         }
 
@@ -448,13 +442,13 @@ internal class RoslynService
             var assembly = symbol.ContainingAssembly;
             if (assembly == null)
             {
-                _logger.LogWarning("Symbol has no containing assembly");
+                logger.LogWarning("Symbol has no containing assembly");
                 return null;
             }
 
             // Get assembly file path from metadata reference
             string? assemblyPath = null;
-            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            foreach (var project in workspaceManager.CurrentSolution.Projects)
             {
                 var compilation = await project.GetCompilationAsync();
                 if (compilation == null) continue;
@@ -476,9 +470,9 @@ internal class RoslynService
                 if (assemblyPath != null) break;
             }
 
-            if (string.IsNullOrEmpty(assemblyPath))
+            if (assemblyPath.IsNullOrEmpty())
             {
-                _logger.LogWarning("Could not find assembly path for {Assembly}", assembly.Name);
+                logger.LogWarning("Could not find assembly path for {Assembly}", assembly.Name);
                 return null;
             }
 
@@ -487,7 +481,7 @@ internal class RoslynService
             var typeToDecompile = symbol as ITypeSymbol ?? symbol.ContainingType;
             if (typeToDecompile == null)
             {
-                _logger.LogWarning("Symbol {Symbol} has no containing type to decompile", symbol.Name);
+                logger.LogWarning("Symbol {Symbol} has no containing type to decompile", symbol.Name);
                 return null;
             }
 
@@ -496,10 +490,10 @@ internal class RoslynService
                 .Replace("<", "`")
                 .Split('`')[0]; // Remove generic arity notation for decompiler
 
-            var decompiledSource = _decompilerService.DecompileType(assemblyPath, fullTypeName);
+            var decompiledSource = decompilerService.DecompileType(assemblyPath, fullTypeName);
             if (decompiledSource == null)
             {
-                _logger.LogWarning("Failed to decompile {TypeName} from {Assembly}", fullTypeName, assemblyPath);
+                logger.LogWarning("Failed to decompile {TypeName} from {Assembly}", fullTypeName, assemblyPath);
                 return null;
             }
 
@@ -518,7 +512,7 @@ internal class RoslynService
         string typeName,
         bool includeInherited = false)
     {
-        if (_workspaceManager.CurrentSolution == null)
+        if (workspaceManager.CurrentSolution == null)
         {
             throw new InvalidOperationException("Workspace not initialized");
         }
@@ -526,7 +520,7 @@ internal class RoslynService
         ITypeSymbol? typeSymbol = null;
 
         // Look up the type by fully qualified name
-        foreach (var project in _workspaceManager.CurrentSolution.Projects)
+        foreach (var project in workspaceManager.CurrentSolution.Projects)
         {
             var compilation = await project.GetCompilationAsync();
             if (compilation == null) continue;
@@ -537,7 +531,7 @@ internal class RoslynService
 
         if (typeSymbol == null)
         {
-            _logger.LogWarning("Type {TypeName} not found", typeName);
+            logger.LogWarning("Type {TypeName} not found", typeName);
             return null;
         }
 
@@ -556,7 +550,7 @@ internal class RoslynService
             var syntaxTree = location.SourceTree;
             if (syntaxTree == null)
             {
-                _logger.LogWarning("Type {TypeName} has no syntax tree", typeName);
+                logger.LogWarning("Type {TypeName} has no syntax tree", typeName);
                 return null;
             }
 
@@ -571,7 +565,7 @@ internal class RoslynService
 
             if (typeDeclarationNode == null)
             {
-                _logger.LogWarning("Could not find type declaration node for {TypeName}", typeName);
+                logger.LogWarning("Could not find type declaration node for {TypeName}", typeName);
                 return null;
             }
 
@@ -593,13 +587,13 @@ internal class RoslynService
             // Type is in metadata (DLL) - decompile it
             if (assembly == null)
             {
-                _logger.LogWarning("Type {TypeName} has no containing assembly", typeName);
+                logger.LogWarning("Type {TypeName} has no containing assembly", typeName);
                 return null;
             }
 
             // Find assembly file path
             string? assemblyPath = null;
-            foreach (var project in _workspaceManager.CurrentSolution.Projects)
+            foreach (var project in workspaceManager.CurrentSolution.Projects)
             {
                 var compilation = await project.GetCompilationAsync();
                 if (compilation == null) continue;
@@ -620,9 +614,9 @@ internal class RoslynService
                 if (assemblyPath != null) break;
             }
 
-            if (string.IsNullOrEmpty(assemblyPath))
+            if (assemblyPath.IsNullOrEmpty())
             {
-                _logger.LogWarning("Could not find assembly path for {Assembly}", assemblyName);
+                logger.LogWarning("Could not find assembly path for {Assembly}", assemblyName);
                 return null;
             }
 
@@ -632,10 +626,10 @@ internal class RoslynService
                 .Replace("<", "`")
                 .Split('`')[0];
 
-            var decompiledSource = _decompilerService.DecompileType(assemblyPath, fullTypeName);
+            var decompiledSource = decompilerService.DecompileType(assemblyPath, fullTypeName);
             if (decompiledSource == null)
             {
-                _logger.LogWarning("Failed to decompile {TypeName} from {Assembly}", fullTypeName, assemblyPath);
+                logger.LogWarning("Failed to decompile {TypeName} from {Assembly}", fullTypeName, assemblyPath);
                 return null;
             }
 
