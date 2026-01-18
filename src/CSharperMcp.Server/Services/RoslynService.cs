@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
@@ -45,8 +47,40 @@ internal class RoslynService
                 var compilation = await project.GetCompilationAsync(timeoutCts.Token);
                 if (compilation == null) continue;
 
-            var projectDiagnostics = compilation.GetDiagnostics()
-                .Where(d => d.Severity >= minimumSeverity);
+                // Get compiler diagnostics (CS* errors/warnings)
+                var compilerDiagnostics = compilation.GetDiagnostics();
+
+                // Get analyzer diagnostics (IDE* suggestions, code style, etc.)
+                // This includes all analyzers referenced by the project
+                var analyzerDiagnostics = new List<Diagnostic>();
+                if (compilation.Options.SpecificDiagnosticOptions.Any() || project.AnalyzerReferences.Any())
+                {
+                    try
+                    {
+                        var analyzers = project.AnalyzerReferences
+                            .SelectMany(r => r.GetAnalyzersForAllLanguages())
+                            .ToImmutableArray();
+
+                        if (analyzers.Any())
+                        {
+                            var compilationWithAnalyzers = compilation.WithAnalyzers(
+                                analyzers,
+                                options: null); // Use default analyzer options
+                            var analyzerResults = await compilationWithAnalyzers.GetAllDiagnosticsAsync(timeoutCts.Token);
+                            analyzerDiagnostics.AddRange(analyzerResults);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log but don't fail - analyzer diagnostics are nice-to-have
+                        _logger.LogWarning(ex, "Failed to get analyzer diagnostics for project {Project}", project.Name);
+                    }
+                }
+
+                // Combine both types
+                var projectDiagnostics = compilerDiagnostics
+                    .Concat(analyzerDiagnostics)
+                    .Where(d => d.Severity >= minimumSeverity);
 
             // Filter by file if specified
             if (!string.IsNullOrEmpty(filePath))

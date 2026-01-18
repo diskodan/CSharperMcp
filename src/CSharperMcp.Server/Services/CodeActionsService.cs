@@ -57,9 +57,9 @@ internal class CodeActionsService
         var actions = new List<CodeActionInfo>();
 
         // Find the document
-        if (string.IsNullOrEmpty(filePath) || !line.HasValue)
+        if (string.IsNullOrEmpty(filePath))
         {
-            _logger.LogWarning("File path and line are required for getting code actions");
+            _logger.LogWarning("File path is required for getting code actions");
             return actions;
         }
 
@@ -81,16 +81,7 @@ internal class CodeActionsService
             return actions;
         }
 
-        // Get the text span for the location
-        var sourceText = await document.GetTextAsync();
-        var startPosition = sourceText.Lines[line.Value - 1].Start + (column ?? 1) - 1;
-        var endPosition = endLine.HasValue && endColumn.HasValue
-            ? sourceText.Lines[endLine.Value - 1].Start + endColumn.Value - 1
-            : startPosition;
-
-        var textSpan = TextSpan.FromBounds(startPosition, endPosition);
-
-        // Get semantic model and diagnostics at this location
+        // Get semantic model for diagnostics
         var semanticModel = await document.GetSemanticModelAsync();
         if (semanticModel == null)
         {
@@ -98,11 +89,37 @@ internal class CodeActionsService
             return actions;
         }
 
-        var diagnostics = semanticModel.GetDiagnostics();
-        var relevantDiagnostics = diagnostics
-            .Where(d => d.Location.SourceSpan.IntersectsWith(textSpan))
-            .Where(d => diagnosticIds == null || !diagnosticIds.Any() || diagnosticIds.Contains(d.Id))
-            .ToList();
+        // Get all diagnostics for the document
+        var allDiagnostics = semanticModel.GetDiagnostics();
+
+        // Filter diagnostics based on parameters
+        IEnumerable<Diagnostic> relevantDiagnostics;
+
+        if (line.HasValue)
+        {
+            // If line is specified, filter to that location
+            var sourceText = await document.GetTextAsync();
+            var startPosition = sourceText.Lines[line.Value - 1].Start + (column ?? 1) - 1;
+            var endPosition = endLine.HasValue && endColumn.HasValue
+                ? sourceText.Lines[endLine.Value - 1].Start + endColumn.Value - 1
+                : startPosition;
+
+            var textSpan = TextSpan.FromBounds(startPosition, endPosition);
+            relevantDiagnostics = allDiagnostics.Where(d => d.Location.SourceSpan.IntersectsWith(textSpan));
+        }
+        else
+        {
+            // No line specified - return all diagnostics for the file
+            relevantDiagnostics = allDiagnostics;
+        }
+
+        // Apply diagnostic ID filter if specified
+        if (diagnosticIds != null && diagnosticIds.Any())
+        {
+            relevantDiagnostics = relevantDiagnostics.Where(d => diagnosticIds.Contains(d.Id));
+        }
+
+        var relevantDiagnosticsList = relevantDiagnostics.ToList();
 
         // For each diagnostic, check if we know about fixes
         foreach (var diagnostic in relevantDiagnostics)
