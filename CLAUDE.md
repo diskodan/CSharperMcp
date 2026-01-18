@@ -259,14 +259,20 @@ await builder.Build().RunAsync();
 
 7. **`get_code_actions`** - Available refactorings/fixes at location
    - Input: `{ "file", "line", "column", "endLine?", "endColumn?", "diagnosticIds?": ["CS0001"] }`
-   - Use `CodeFixService` and `CodeRefactoringService`
+   - **CRITICAL**: Use MEF-based dynamic discovery instead of hardcoded diagnostic list
+   - Use MEF (Managed Extensibility Framework) composition to discover all available:
+     - `CodeFixProvider` instances from Roslyn and analyzer packages
+     - `CodeRefactoringProvider` instances
+   - This ensures all analyzers/refactorings are automatically discovered
    - Return: array of `{ id, title, kind }`
 
 8. **`apply_code_action`** - Execute a code action
    - Input: `{ "actionId", "file", "preview?": true }`
-   - If preview: return diff
-   - If not preview: apply changes to workspace, return modified files
+   - Apply the code action identified by actionId (from previous `get_code_actions` call)
+   - If preview: return diff without modifying files
+   - If not preview: apply changes to workspace, persist to disk, return modified files
    - Return: `{ changes: [{ file, diff }] }` or `{ applied: true, modifiedFiles: [] }`
+   - Must handle multi-file changes (refactorings can span multiple files)
 
 ### Phase 4: Search & Navigation
 
@@ -469,6 +475,28 @@ When `initialize_workspace` is called with a directory:
 ## Analyzer Support
 
 Roslyn automatically loads analyzers referenced by the project. No special handling needed. The diagnostics will include analyzer warnings (IDE*, CA*, etc.) automatically.
+
+---
+
+## Configuration File Support
+
+To make MCP tool descriptions customizable without code changes, support a YAML configuration file for overriding tool descriptions:
+
+- File location: `..csharper.yaml` or `csharp-er-mcp.yaml` in workspace root
+- Purpose: Allow users to tailor tool descriptions for different LLM contexts
+- Format:
+  ```yaml
+  tools:
+    initialize_workspace:
+      description: "Custom description here..."
+    get_diagnostics:
+      description: "Custom description here..."
+      parameters:
+        file:
+          description: "Custom parameter description..."
+  ```
+- Load at server startup, fall back to default descriptions if not present
+- Consider adding support for per-tool examples as well
 
 ---
 

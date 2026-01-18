@@ -1,4 +1,5 @@
 ﻿using CSharperMcp.Server.Extensions;
+using CSharperMcp.Server.Models;
 using CSharperMcp.Server.Services;
 using CSharperMcp.Server.Workspace;
 using Microsoft.Build.Locator;
@@ -27,6 +28,9 @@ builder.Services.Configure<WorkspaceConfiguration>(options =>
     }
 });
 
+// Configure code action filtering (use defaults)
+builder.Services.Configure<CodeActionFilterConfiguration>(_ => { });
+
 // Configure logging to stderr (stdout is reserved for MCP JSON-RPC)
 builder.Services.AddLogging(logging =>
 {
@@ -41,6 +45,7 @@ builder.Services.AddLogging(logging =>
 builder.Services.AddSingleton<WorkspaceManager>();
 builder.Services.AddSingleton<RoslynService>();
 builder.Services.AddSingleton<DecompilerService>();
+builder.Services.AddSingleton<CodeActionProviderService>();
 builder.Services.AddSingleton<CodeActionsService>();
 
 // Register MCP server with tools auto-discovered from this assembly

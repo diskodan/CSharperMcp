@@ -1,7 +1,9 @@
+using CSharperMcp.Server.Models;
 using CSharperMcp.Server.Services;
 using CSharperMcp.Server.Workspace;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CSharperMcp.Server.IntegrationTests.Services;
 
@@ -9,7 +11,10 @@ internal class CodeActionsServiceIntegrationTests
 {
     private Mock<ILogger<WorkspaceManager>> _workspaceLoggerMock = null!;
     private Mock<ILogger<CodeActionsService>> _codeActionsLoggerMock = null!;
+    private Mock<ILogger<CodeActionProviderService>> _providerServiceLoggerMock = null!;
     private WorkspaceManager _workspaceManager = null!;
+    private CodeActionProviderService _providerService = null!;
+    private IOptions<CodeActionFilterConfiguration> _filterConfig = null!;
     private CodeActionsService _sut = null!;
 
     [OneTimeSetUp]
@@ -26,8 +31,11 @@ internal class CodeActionsServiceIntegrationTests
     {
         _workspaceLoggerMock = new Mock<ILogger<WorkspaceManager>>();
         _codeActionsLoggerMock = new Mock<ILogger<CodeActionsService>>();
+        _providerServiceLoggerMock = new Mock<ILogger<CodeActionProviderService>>();
         _workspaceManager = new WorkspaceManager(_workspaceLoggerMock.Object);
-        _sut = new CodeActionsService(_workspaceManager, _codeActionsLoggerMock.Object);
+        _providerService = new CodeActionProviderService(_providerServiceLoggerMock.Object);
+        _filterConfig = Options.Create(new CodeActionFilterConfiguration());
+        _sut = new CodeActionsService(_workspaceManager, _providerService, _filterConfig, _codeActionsLoggerMock.Object);
     }
 
     [TearDown]

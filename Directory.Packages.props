@@ -15,6 +15,12 @@
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
     <PackageVersion Include="Microsoft.Build.Framework" Version="17.11.31" />
 
+    <!-- MEF v2 (System.Composition) -->
+    <PackageVersion Include="System.Composition" Version="9.0.0" />
+    <PackageVersion Include="System.Composition.AttributedModel" Version="9.0.0" />
+    <PackageVersion Include="System.Composition.Runtime" Version="9.0.0" />
+    <PackageVersion Include="System.Composition.Hosting" Version="9.0.0" />
+
     <!-- Decompiler -->
     <PackageVersion Include="ICSharpCode.Decompiler" Version="9.1.0.7988" />
 

@@ -14,6 +14,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="System.Composition" />
+    <PackageReference Include="System.Composition.AttributedModel" />
+    <PackageReference Include="System.Composition.Hosting" />
+    <PackageReference Include="System.Composition.Runtime" />
     <PackageReference Include="TaskTupleAwaiter" />
   </ItemGroup>
 
