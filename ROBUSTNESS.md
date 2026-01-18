@@ -117,3 +117,31 @@ Timeout behavior is difficult to test in unit/integration tests. Consider:
 - Manual testing with very large solutions
 - Stress tests with intentionally slow operations
 - Integration tests with artificially short timeouts (not recommended for CI)
+
+## Logging Configuration
+
+**CRITICAL**: When using MCP stdio transport, console logging MUST write to stderr, not stdout:
+
+```csharp
+builder.Services.AddLogging(logging =>
+{
+    logging.AddConsole(options =>
+    {
+        options.LogToStandardErrorThreshold = LogLevel.Trace;
+    });
+    logging.SetMinimumLevel(LogLevel.Information);
+});
+```
+
+**Why**: MCP uses stdout for JSON-RPC messages. If console logging also writes to stdout, the streams interleave and corrupt the JSON, causing client parsing failures.
+
+## Integration Test Robustness
+
+The MCP integration tests have been hardened against logging/stdio issues:
+
+1. **Stderr capture**: Tests now async-read stderr and log it via `TestContext.Out.WriteLine`
+2. **JSON parsing resilience**: `SendRequestAsync` now:
+   - Skips non-JSON lines (empty lines, log messages that leaked to stdout)
+   - Has a max attempts limit to prevent infinite loops
+   - Catches `JsonException` and logs malformed JSON before skipping it
+3. **Better error messages**: Clear diagnostics when tests fail

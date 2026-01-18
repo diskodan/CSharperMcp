@@ -38,6 +38,26 @@ public class McpServerIntegrationTests
         _serverProcess.Start();
         _stdin = _serverProcess.StandardInput;
         _stdout = _serverProcess.StandardOutput;
+        
+        // Read stderr asynchronously and log it for debugging
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_serverProcess.HasExited)
+                {
+                    var line = await _serverProcess.StandardError.ReadLineAsync();
+                    if (line != null)
+                    {
+                        TestContext.Out.WriteLine($"[SERVER] {line}");
+                    }
+                }
+            }
+            catch
+            {
+                // Process ended, ignore
+            }
+        });
     }
 
     [TearDown]
@@ -72,19 +92,34 @@ public class McpServerIntegrationTests
 
         // Read lines until we get our response
         var expectedId = _requestId;
-        while (true)
+        var maxAttempts = 100; // Prevent infinite loop
+        var attempts = 0;
+        
+        while (attempts++ < maxAttempts)
         {
             var line = await _stdout!.ReadLineAsync();
             if (line == null)
                 throw new Exception("Server closed connection");
 
-            if (!line.StartsWith("{"))
-                continue; // Skip non-JSON lines (logging)
+            // Skip non-JSON lines (these are logs that should go to stderr)
+            if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("{"))
+                continue;
 
-            var response = JsonNode.Parse(line);
-            if (response?["id"]?.GetValue<int>() == expectedId)
-                return response;
+            try
+            {
+                var response = JsonNode.Parse(line);
+                if (response?["id"]?.GetValue<int>() == expectedId)
+                    return response;
+            }
+            catch (JsonException ex)
+            {
+                // Skip malformed JSON (shouldn't happen with fixed logging, but be defensive)
+                TestContext.Out.WriteLine($"Skipping malformed JSON: {line.Substring(0, Math.Min(100, line.Length))}... Error: {ex.Message}");
+                continue;
+            }
         }
+        
+        throw new Exception($"Failed to receive response for request {expectedId} after {maxAttempts} attempts");
     }
 
     private async Task SendNotificationAsync(string method, JsonNode? parameters = null)

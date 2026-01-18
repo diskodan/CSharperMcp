@@ -23,10 +23,13 @@ for (int i = 0; i < args.Length; i++)
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Configure logging
+// Configure logging to stderr (stdout is reserved for MCP JSON-RPC)
 builder.Services.AddLogging(logging =>
 {
-    logging.AddConsole();
+    logging.AddConsole(options =>
+    {
+        options.LogToStandardErrorThreshold = LogLevel.Trace;
+    });
     logging.SetMinimumLevel(LogLevel.Information);
 });
 
