@@ -1,11 +1,10 @@
-﻿using Microsoft.Build.Locator;
+﻿using CSharperMcp.Server.Services;
+using CSharperMcp.Server.Workspace;
+using Microsoft.Build.Locator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
-using CSharperMcp.Server.Workspace;
-using CSharperMcp.Server.Services;
-using CSharperMcp.Server.Tools;
 
 // CRITICAL: Register MSBuild before any Roslyn types are loaded
 MSBuildLocator.RegisterDefaults();
@@ -43,10 +42,34 @@ builder.Services.AddSingleton<CodeActionsService>();
 builder.Services.AddSingleton(new WorkspaceConfiguration { InitialWorkspacePath = workspacePath });
 
 // Register MCP server with tools auto-discovered from this assembly
-builder.Services
-    .AddMcpServer()
-    .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+var mcpServer = builder.Services.AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly();
+
+// Filter out initialize_workspace tool if workspace was auto-initialized
+if (!string.IsNullOrEmpty(workspacePath))
+{
+    mcpServer.AddListToolsFilter(next =>
+        async (request, cancellationToken) =>
+        {
+            var logger = request.Services?.GetService<ILogger<Program>>();
+            logger?.LogInformation(
+                "Workspace auto-initialized from --workspace parameter, hiding initialize_workspace tool"
+            );
+
+            // Call the next handler in the pipeline to get the full list of tools
+            var result = await next(request, cancellationToken);
+
+            // Remove initialize_workspace from the tools list since workspace is already initialized
+            result.Tools = result.Tools.Where(t => t.Name != "initialize_workspace").ToList();
+
+            if (logger?.IsEnabled(LogLevel.Debug) == true)
+            {
+                logger.LogDebug("Filtered tools list, {Count} tools remaining", result.Tools.Count);
+            }
+
+            return result;
+        }
+    );
+}
 
 var app = builder.Build();
 
@@ -56,12 +79,18 @@ if (!string.IsNullOrEmpty(workspacePath))
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
     var workspaceManager = app.Services.GetRequiredService<WorkspaceManager>();
 
-    logger.LogInformation("Auto-initializing workspace from --workspace parameter: {Path}", workspacePath);
+    logger.LogInformation(
+        "Auto-initializing workspace from --workspace parameter: {Path}",
+        workspacePath
+    );
     var (success, message, projectCount) = await workspaceManager.InitializeAsync(workspacePath);
 
     if (success)
     {
-        logger.LogInformation("Workspace initialized successfully: {ProjectCount} project(s) loaded", projectCount);
+        logger.LogInformation(
+            "Workspace initialized successfully: {ProjectCount} project(s) loaded",
+            projectCount
+        );
     }
     else
     {
