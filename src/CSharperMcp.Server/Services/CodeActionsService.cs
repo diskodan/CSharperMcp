@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -25,6 +27,7 @@ internal class CodeActionsService(
     ILogger<CodeActionsService> logger)
 {
     private readonly CodeActionFilterConfiguration _filterConfig = filterConfig.Value;
+    private readonly ConcurrentDictionary<string, CodeAction> _codeActionCache = new();
 
     public async Task<IEnumerable<CodeActionInfo>> GetCodeActionsAsync(
         string? filePath = null,
@@ -146,11 +149,14 @@ internal class CodeActionsService(
         var allCodeFixResults = await Task.WhenAll((IEnumerable<Task<IEnumerable<(CodeAction Action, ImmutableArray<string> DiagnosticIds)>>>)codeFixTasks);
         var allCodeFixes = allCodeFixResults.SelectMany(x => x).ToList();
 
-        // Convert CodeActions to CodeActionInfo
+        // Convert CodeActions to CodeActionInfo and cache them
         foreach (var (action, diagnosticIdsForAction) in allCodeFixes)
         {
+            var actionId = $"fix_{action.EquivalenceKey ?? Guid.NewGuid().ToString()}";
+            _codeActionCache[actionId] = action;
+
             actions.Add(new CodeActionInfo(
-                Id: $"fix_{action.EquivalenceKey ?? Guid.NewGuid().ToString()}",
+                Id: actionId,
                 Title: action.Title,
                 Kind: "QuickFix",
                 DiagnosticIds: diagnosticIdsForAction.ToArray()
@@ -186,13 +192,16 @@ internal class CodeActionsService(
         var allRefactoringResults = await Task.WhenAll((IEnumerable<Task<IEnumerable<CodeAction>>>)refactoringTasks);
         var allRefactorings = allRefactoringResults.SelectMany(x => x).ToList();
 
-        // Convert refactorings to CodeActionInfo (if enabled)
+        // Convert refactorings to CodeActionInfo (if enabled) and cache them
         if (_filterConfig.IncludeRefactorings)
         {
             foreach (var action in allRefactorings)
             {
+                var actionId = $"refactor_{action.EquivalenceKey ?? Guid.NewGuid().ToString()}";
+                _codeActionCache[actionId] = action;
+
                 actions.Add(new CodeActionInfo(
-                    Id: $"refactor_{action.EquivalenceKey ?? Guid.NewGuid().ToString()}",
+                    Id: actionId,
                     Title: action.Title,
                     Kind: "Refactor",
                     DiagnosticIds: Array.Empty<string>()
@@ -260,5 +269,230 @@ internal class CodeActionsService(
         }
 
         return result;
+    }
+
+    public async Task<ApplyCodeActionResult> ApplyCodeActionAsync(
+        string actionId,
+        bool preview = false)
+    {
+        if (workspaceManager.CurrentSolution == null)
+        {
+            return new ApplyCodeActionResult(
+                Success: false,
+                ErrorMessage: "Workspace not initialized",
+                Changes: Array.Empty<FileChange>()
+            );
+        }
+
+        // Retrieve the CodeAction from cache
+        if (!_codeActionCache.TryGetValue(actionId, out var codeAction))
+        {
+            return new ApplyCodeActionResult(
+                Success: false,
+                ErrorMessage: $"Code action with ID '{actionId}' not found. Call get_code_actions first to populate the cache.",
+                Changes: Array.Empty<FileChange>()
+            );
+        }
+
+        try
+        {
+            // Get the operations for this code action
+            var operations = await codeAction.GetOperationsAsync(CancellationToken.None);
+
+            var fileChanges = new List<FileChange>();
+            Solution? newSolution = null;
+
+            // Process each operation
+            foreach (var operation in operations)
+            {
+                if (operation is ApplyChangesOperation applyChangesOperation)
+                {
+                    newSolution = applyChangesOperation.ChangedSolution;
+                    break; // Typically there's only one ApplyChangesOperation
+                }
+            }
+
+            if (newSolution == null)
+            {
+                return new ApplyCodeActionResult(
+                    Success: false,
+                    ErrorMessage: "Code action did not produce any changes",
+                    Changes: Array.Empty<FileChange>()
+                );
+            }
+
+            // Get the document changes
+            var solutionChanges = newSolution.GetChanges(workspaceManager.CurrentSolution);
+
+            foreach (var projectChanges in solutionChanges.GetProjectChanges())
+            {
+                // Handle changed documents
+                foreach (var changedDocId in projectChanges.GetChangedDocuments())
+                {
+                    var oldDoc = workspaceManager.CurrentSolution.GetDocument(changedDocId);
+                    var newDoc = newSolution.GetDocument(changedDocId);
+
+                    if (oldDoc?.FilePath == null || newDoc == null)
+                        continue;
+
+                    var oldText = await oldDoc.GetTextAsync();
+                    var newText = await newDoc.GetTextAsync();
+
+                    var change = new FileChange(
+                        FilePath: oldDoc.FilePath,
+                        OriginalContent: oldText.ToString(),
+                        ModifiedContent: newText.ToString(),
+                        UnifiedDiff: GenerateUnifiedDiff(oldDoc.FilePath, oldText.ToString(), newText.ToString())
+                    );
+
+                    fileChanges.Add(change);
+                }
+
+                // Handle added documents
+                foreach (var addedDocId in projectChanges.GetAddedDocuments())
+                {
+                    var newDoc = newSolution.GetDocument(addedDocId);
+
+                    if (newDoc?.FilePath == null)
+                        continue;
+
+                    var newText = await newDoc.GetTextAsync();
+
+                    var change = new FileChange(
+                        FilePath: newDoc.FilePath,
+                        OriginalContent: null,
+                        ModifiedContent: newText.ToString(),
+                        UnifiedDiff: GenerateUnifiedDiff(newDoc.FilePath, "", newText.ToString())
+                    );
+
+                    fileChanges.Add(change);
+                }
+
+                // Handle removed documents
+                foreach (var removedDocId in projectChanges.GetRemovedDocuments())
+                {
+                    var oldDoc = workspaceManager.CurrentSolution.GetDocument(removedDocId);
+
+                    if (oldDoc?.FilePath == null)
+                        continue;
+
+                    var oldText = await oldDoc.GetTextAsync();
+
+                    var change = new FileChange(
+                        FilePath: oldDoc.FilePath,
+                        OriginalContent: oldText.ToString(),
+                        ModifiedContent: null,
+                        UnifiedDiff: GenerateUnifiedDiff(oldDoc.FilePath, oldText.ToString(), "")
+                    );
+
+                    fileChanges.Add(change);
+                }
+            }
+
+            // If not preview mode, apply the changes to the workspace and persist to disk
+            if (!preview)
+            {
+                if (workspaceManager.Workspace.TryApplyChanges(newSolution))
+                {
+                    // Update the current solution
+                    workspaceManager.UpdateCurrentSolution(newSolution);
+
+                    // Persist changes to disk
+                    foreach (var change in fileChanges)
+                    {
+                        if (change.ModifiedContent != null)
+                        {
+                            await File.WriteAllTextAsync(change.FilePath, change.ModifiedContent);
+                            logger.LogInformation("Applied code action to file: {FilePath}", change.FilePath);
+                        }
+                        else if (change.OriginalContent != null)
+                        {
+                            // File was removed
+                            if (File.Exists(change.FilePath))
+                            {
+                                File.Delete(change.FilePath);
+                                logger.LogInformation("Removed file: {FilePath}", change.FilePath);
+                            }
+                        }
+                    }
+
+                    logger.LogInformation("Successfully applied code action '{Title}' ({ActionId})", codeAction.Title, actionId);
+                }
+                else
+                {
+                    return new ApplyCodeActionResult(
+                        Success: false,
+                        ErrorMessage: "Failed to apply changes to workspace",
+                        Changes: Array.Empty<FileChange>()
+                    );
+                }
+            }
+
+            return new ApplyCodeActionResult(
+                Success: true,
+                ErrorMessage: null,
+                Changes: fileChanges
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error applying code action '{ActionId}'", actionId);
+            return new ApplyCodeActionResult(
+                Success: false,
+                ErrorMessage: $"Error applying code action: {ex.Message}",
+                Changes: Array.Empty<FileChange>()
+            );
+        }
+    }
+
+    private static string GenerateUnifiedDiff(string filePath, string originalContent, string modifiedContent)
+    {
+        var originalLines = originalContent.Split('\n');
+        var modifiedLines = modifiedContent.Split('\n');
+
+        var diff = new StringBuilder();
+        diff.AppendLine($"--- {filePath}");
+        diff.AppendLine($"+++ {filePath}");
+
+        // Simple line-by-line diff (not a full unified diff algorithm, but sufficient for preview)
+        var maxLines = Math.Max(originalLines.Length, modifiedLines.Length);
+        var hunkStart = 0;
+        var inHunk = false;
+
+        for (int i = 0; i < maxLines; i++)
+        {
+            var oldLine = i < originalLines.Length ? originalLines[i] : null;
+            var newLine = i < modifiedLines.Length ? modifiedLines[i] : null;
+
+            if (oldLine != newLine)
+            {
+                if (!inHunk)
+                {
+                    hunkStart = Math.Max(0, i - 3);
+                    diff.AppendLine($"@@ -{hunkStart + 1},{Math.Min(originalLines.Length - hunkStart, 10)} +{hunkStart + 1},{Math.Min(modifiedLines.Length - hunkStart, 10)} @@");
+                    inHunk = true;
+                }
+
+                if (oldLine != null && newLine == null)
+                {
+                    diff.AppendLine($"-{oldLine}");
+                }
+                else if (oldLine == null && newLine != null)
+                {
+                    diff.AppendLine($"+{newLine}");
+                }
+                else
+                {
+                    diff.AppendLine($"-{oldLine}");
+                    diff.AppendLine($"+{newLine}");
+                }
+            }
+            else if (inHunk && oldLine != null)
+            {
+                diff.AppendLine($" {oldLine}");
+            }
+        }
+
+        return diff.ToString();
     }
 }

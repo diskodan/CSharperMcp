@@ -13,6 +13,7 @@ internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
     private Solution? _solution;
 
     public Solution? CurrentSolution => _solution;
+    public MSBuildWorkspace? Workspace => _workspace;
     public bool IsInitialized => _solution != null;
     public IReadOnlyList<string> WorkspaceDiagnostics => _workspaceDiagnostics;
 
@@ -107,6 +108,12 @@ internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
         var message = $"[{e.Diagnostic.Kind}] {e.Diagnostic.Message}";
         _workspaceDiagnostics.Add(message);
         logger.LogWarning("Workspace diagnostic: {Message}", message);
+    }
+
+    public void UpdateCurrentSolution(Solution solution)
+    {
+        _solution = solution;
+        logger.LogDebug("Updated current solution");
     }
 
     public void Dispose()

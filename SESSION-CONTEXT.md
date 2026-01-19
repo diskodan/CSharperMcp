@@ -1,8 +1,8 @@
 # Session Context - CSharperMcp Development
 
-**Last Updated**: 2026-01-18
-**Status**: Phase 3 in progress - MEF-based code action discovery complete
-**Tests**: All 43 tests passing (2 unit + 41 integration)
+**Last Updated**: 2026-01-19
+**Status**: Phase 3 complete - apply_code_action tool implemented
+**Tests**: All 50 tests passing (7 unit + 43 integration)
 
 ## Recent Accomplishments ✅
 
@@ -41,62 +41,45 @@
 1. ✅ `initialize_workspace` - Load solution/project from path
 2. ✅ `get_diagnostics` - Compiler errors/warnings/analyzer messages
 3. ✅ `get_code_actions` - Available refactorings/fixes at location (MEF-based)
+4. ✅ `apply_code_action` - Execute code actions with preview/apply modes
 
 ### Configuration
 - **WorkspaceConfiguration** - `--workspace` parameter support
 - **CodeActionFilterConfiguration** - NEW: Smart filtering for code actions
 - Both use `IOptions<T>` pattern, registered in `Program.cs`
 
+### 3. Apply Code Action Tool (Completed)
+- **Commit**: Pending
+- **What was done**:
+  - Created `ApplyCodeActionResult` and `FileChange` models
+  - Added `ConcurrentDictionary<string, CodeAction>` cache in `CodeActionsService`
+  - Implemented `ApplyCodeActionAsync(actionId, preview)` method
+  - **Preview mode**: Returns unified diffs without modifying files
+  - **Apply mode**: Persists changes to disk using `Workspace.TryApplyChanges()`
+  - Handles multi-file changes (added, modified, and removed documents)
+  - Added `UpdateCurrentSolution` method to `WorkspaceManager`
+  - Exposed `Workspace` property in `WorkspaceManager`
+  - Created `ApplyCodeActionTool` MCP tool
+  - Added 5 unit tests for model validation
+  - Added 4 integration tests for preview/apply modes
+  - All 50 tests passing
+
+**Key Implementation Details**:
+- Cache strategy: Session-based (no expiration, cleared on restart)
+- Action ID format: `fix_{EquivalenceKey ?? Guid.NewGuid()}` or `refactor_{...}`
+- Diff format: Unified diff format with context lines
+- Multi-file handling: Returns array of `FileChange` objects, one per file
+- Error handling: Returns `ApplyCodeActionResult` with success flag and error message
+
+**Answers to Design Questions**:
+1. **Cache strategy**: Session-based (Option A) - simplest and sufficient for current use case
+2. **Action ID**: Uses `EquivalenceKey` when available, falls back to GUID
+3. **Diff format**: Unified diff format (industry standard)
+4. **Multi-file**: Returns all changes in single response as array
+
 ## Remaining Work
 
-### Priority 1: Implement apply_code_action Tool (Phase 3)
-
-**Goal**: Execute code actions discovered by `get_code_actions`
-
-**Requirements** (from CLAUDE.md Phase 3):
-- Input: `{ "actionId", "file", "preview?": true }`
-- If preview: return diff without modifying files
-- If not preview: apply changes to workspace, persist to disk
-- Return: `{ changes: [{ file, diff }] }` or `{ applied: true, modifiedFiles: [] }`
-- **CRITICAL**: Must handle multi-file changes (refactorings can span multiple files)
-
-**Implementation Approach**:
-1. Store a mapping of action IDs to actual `CodeAction` instances
-   - Currently we only return `CodeActionInfo` (ID, title, kind)
-   - Need to maintain a cache: `Dictionary<string, CodeAction>`
-   - Consider cache expiration/cleanup strategy
-2. Retrieve the `CodeAction` by ID from cache
-3. Call `action.GetOperationsAsync()` to get operations
-4. Extract `ApplyChangesOperation` which contains the modified solution
-5. If preview: generate diffs for each changed document
-6. If not preview: apply changes using `Workspace.TryApplyChanges()`
-7. Handle edge cases:
-   - Action not found in cache
-   - Action expired/stale
-   - Multi-file changes
-   - Workspace conflicts
-
-**Key Roslyn APIs**:
-```csharp
-var operations = await codeAction.GetOperationsAsync(cancellationToken);
-foreach (var operation in operations.OfType<ApplyChangesOperation>())
-{
-    var newSolution = operation.ChangedSolution;
-    // Compare with current solution to generate diffs
-    // or apply via workspace.TryApplyChanges(newSolution)
-}
-```
-
-**Testing Strategy**:
-- Add integration test that:
-  1. Loads a solution with a fixable diagnostic
-  2. Gets code actions
-  3. Applies a code action (preview mode)
-  4. Verifies diff is correct
-  5. Applies a code action (apply mode)
-  6. Verifies file is actually modified
-
-### Priority 2: Add Configuration File Support (Medium Priority)
+### Priority 1: Add Configuration File Support (Medium Priority)
 
 **Goal**: Allow users to customize MCP tool descriptions without modifying code
 
@@ -123,7 +106,7 @@ foreach (var operation in operations.OfType<ApplyChangesOperation>())
 - Create a middleware/decorator to override tool metadata
 - May need to intercept MCP tool registration
 
-### Priority 3: Pre-1.0 Usability Reviews (Medium Priority)
+### Priority 2: Pre-1.0 Usability Reviews (Medium Priority)
 
 **From pending-todos.md**:
 
@@ -218,35 +201,17 @@ dotnet run --project src/CSharperMcp.Server -- --workspace /path/to/solution
 When resuming work, recommend:
 1. Read this document
 2. Review `pending-todos.md` for current task list
-3. Start with implementing `apply_code_action` tool (highest priority)
-4. Reference the "Implementation Approach" section above
-5. Add integration tests for the new tool
-6. Run all tests before committing
+3. Consider adding configuration file support (next on priority list)
+4. Or start implementing Phase 2 symbol intelligence tools
+5. Run all tests before committing
 
 ## Questions to Resolve
 
-1. **Code action cache strategy**: How long should we cache `CodeAction` instances?
-   - Option A: Cache for duration of session (simplest)
-   - Option B: Cache with expiration (e.g., 5 minutes)
-   - Option C: Cache per-document with invalidation on document changes
-
-2. **Action ID generation**: Should we use `EquivalenceKey` or generate our own?
-   - Current: `fix_{EquivalenceKey ?? Guid.NewGuid()}`
-   - Issue: GUIDs make actions non-reproducible across calls
-
-3. **Diff format**: What format should preview diffs use?
-   - Unified diff?
-   - Side-by-side?
-   - Simple before/after?
-
-4. **Multi-file handling**: How to present multi-file changes to LLM?
-   - Return all diffs in single response?
-   - Paginate?
-   - Summary + details on request?
+None currently - all Phase 3 design questions have been answered in the implementation.
 
 ## Git Status
 
-- Working tree clean
+- Working tree dirty (apply_code_action implementation not yet committed)
 - Latest commit: `4cff02d` - Add MEF-based code action discovery with smart filtering
 - Branch: `main`
-- All changes committed
+- Ready to commit apply_code_action implementation

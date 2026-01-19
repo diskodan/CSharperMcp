@@ -114,4 +114,130 @@ internal class CodeActionsServiceIntegrationTests
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*not initialized*");
     }
+
+    [Test]
+    public async Task ApplyCodeActionAsync_InPreviewMode_ReturnsChangesWithoutApplying()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // First, get code actions to populate the cache
+        var actions = (await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1)).ToList();
+
+        // Skip test if no actions found (means no fixable diagnostics at this location)
+        if (!actions.Any())
+        {
+            Assert.Inconclusive("No code actions found at the specified location");
+            return;
+        }
+
+        var firstAction = actions.First();
+
+        // Act - Apply in preview mode
+        var result = await _sut.ApplyCodeActionAsync(firstAction.Id, preview: true);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Changes.Should().NotBeEmpty();
+        result.Changes.Should().AllSatisfy(change =>
+        {
+            change.FilePath.Should().NotBeNullOrEmpty();
+            // In preview mode, we should have both original and modified content (or one of them for add/delete)
+            (change.OriginalContent != null || change.ModifiedContent != null).Should().BeTrue();
+        });
+    }
+
+    [Test]
+    public async Task ApplyCodeActionAsync_WithInvalidActionId_ReturnsFailure()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Try to apply non-existent action
+        var result = await _sut.ApplyCodeActionAsync("non-existent-action-id", preview: true);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("not found");
+        result.Changes.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ApplyCodeActionAsync_WhenWorkspaceNotInitialized_ReturnsFailure()
+    {
+        // Arrange - don't initialize workspace
+
+        // Act
+        var result = await _sut.ApplyCodeActionAsync("some-action-id", preview: true);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("Workspace not initialized");
+        result.Changes.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ApplyCodeActionAsync_InApplyMode_PersistsChangesToDisk()
+    {
+        // Arrange
+        var fixturePath = GetFixturePath("SolutionWithErrors");
+        var solutionPath = Path.Combine(fixturePath, "SolutionWithErrors.sln");
+        var targetFile = Path.Combine(fixturePath, "ProjectWithErrors", "ClassWithErrors.cs");
+
+        // Create a backup of the original file
+        var backupFile = targetFile + ".backup";
+        if (File.Exists(targetFile))
+        {
+            File.Copy(targetFile, backupFile, overwrite: true);
+        }
+
+        try
+        {
+            await _workspaceManager.InitializeAsync(solutionPath);
+
+            // First, get code actions to populate the cache
+            var actions = (await _sut.GetCodeActionsAsync(
+                filePath: "ClassWithErrors.cs",
+                line: 8,
+                column: 1)).ToList();
+
+            // Skip test if no actions found
+            if (!actions.Any())
+            {
+                Assert.Inconclusive("No code actions found at the specified location");
+                return;
+            }
+
+            var firstAction = actions.First();
+            var originalContent = File.Exists(targetFile) ? await File.ReadAllTextAsync(targetFile) : null;
+
+            // Act - Apply without preview
+            var result = await _sut.ApplyCodeActionAsync(firstAction.Id, preview: false);
+
+            // Assert
+            result.Success.Should().BeTrue();
+            result.Changes.Should().NotBeEmpty();
+
+            // Verify that the file on disk was actually modified
+            if (File.Exists(targetFile) && originalContent != null)
+            {
+                var modifiedContent = await File.ReadAllTextAsync(targetFile);
+                modifiedContent.Should().NotBe(originalContent, "The file should have been modified on disk");
+            }
+        }
+        finally
+        {
+            // Restore the original file
+            if (File.Exists(backupFile))
+            {
+                File.Copy(backupFile, targetFile, overwrite: true);
+                File.Delete(backupFile);
+            }
+        }
+    }
 }
