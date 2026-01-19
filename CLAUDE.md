@@ -480,23 +480,35 @@ Roslyn automatically loads analyzers referenced by the project. No special handl
 
 ## Configuration File Support
 
-To make MCP tool descriptions customizable without code changes, support a YAML configuration file for overriding tool descriptions:
+YAML configuration files allow customization of MCP server behavior and tool descriptions without code changes:
 
-- File location: `..csharper.yaml` or `csharp-er-mcp.yaml` in workspace root
-- Purpose: Allow users to tailor tool descriptions for different LLM contexts
-- Format:
+- **File locations** (hierarchical merging, later files override earlier):
+  1. `~/.config/csharp-er-mcp.yml` - User global preferences (optional)
+  2. `<workspace>/.config/csharp-er-mcp.yml` - Project-specific config (optional)
+
+- **Format**:
   ```yaml
+  # Server configuration (optional - has defaults)
+  mcp:
+    serverInstructions: "Custom instructions for the MCP server..."
+
+  # Tool descriptions (optional)
   tools:
     initialize_workspace:
       description: "Custom description here..."
+      isEnabled: true
     get_diagnostics:
       description: "Custom description here..."
-      parameters:
-        file:
-          description: "Custom parameter description..."
+      isEnabled: true
+    some_tool_to_hide:
+      isEnabled: false  # Tool will be filtered out
   ```
-- Load at server startup, fall back to default descriptions if not present
-- Consider adding support for per-tool examples as well
+
+- **Features**:
+  - Override server instructions sent to clients
+  - Customize individual tool descriptions
+  - Disable tools via `isEnabled: false`
+  - Configuration merging: user config → project config → command-line overrides
 
 ---
 

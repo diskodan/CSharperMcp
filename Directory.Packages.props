@@ -26,6 +26,7 @@
 
     <!-- Utilities -->
     <PackageVersion Include="TaskTupleAwaiter" Version="2.1.2" />
+    <PackageVersion Include="NetEscapades.Configuration.Yaml" Version="3.1.0" />
   </ItemGroup>
 
   <ItemGroup Label="Test Packages">

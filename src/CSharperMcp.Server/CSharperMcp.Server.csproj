@@ -14,6 +14,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="NetEscapades.Configuration.Yaml" />
     <PackageReference Include="System.Composition" />
     <PackageReference Include="System.Composition.AttributedModel" />
     <PackageReference Include="System.Composition.Hosting" />

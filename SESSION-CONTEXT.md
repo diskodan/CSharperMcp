@@ -79,32 +79,32 @@
 
 ## Remaining Work
 
-### Priority 1: Add Configuration File Support (Medium Priority)
+### Priority 1: Add Configuration File Support ✅ **COMPLETED**
 
 **Goal**: Allow users to customize MCP tool descriptions without modifying code
 
-**Requirements** (from CLAUDE.md):
-- File location: `..csharper.yaml` or `csharp-er-mcp.yaml` in workspace root
-- Purpose: Tailor tool descriptions for different LLM contexts
+**Implementation**:
+- File locations (hierarchical merging):
+  1. `~/.config/csharp-er-mcp.yml` - User global preferences
+  2. `<workspace>/.config/csharp-er-mcp.yml` - Project-specific config
 - Format:
   ```yaml
+  mcp:
+    serverInstructions: "Custom instructions..."
   tools:
     initialize_workspace:
       description: "Custom description here..."
-    get_diagnostics:
-      description: "Custom description here..."
-      parameters:
-        file:
-          description: "Custom parameter description..."
+      isEnabled: true
+    some_tool_to_hide:
+      isEnabled: false
   ```
-- Load at server startup, fall back to default descriptions if not present
-- Consider adding support for per-tool examples
-
-**Implementation Notes**:
-- Use a YAML parsing library (e.g., YamlDotNet)
-- Load during DI configuration in `Program.cs`
-- Create a middleware/decorator to override tool metadata
-- May need to intercept MCP tool registration
+- Features:
+  - Override server instructions via `mcp:serverInstructions`
+  - Customize tool descriptions
+  - Disable tools via `isEnabled: false`
+  - Automatic workspace tool hiding when `--workspace` is provided
+- Uses NetEscapades.Configuration.Yaml for YAML parsing
+- Configuration applied via `McpServer.AddListToolsFilter()`
 
 ### Priority 2: Pre-1.0 Usability Reviews (Medium Priority)
 

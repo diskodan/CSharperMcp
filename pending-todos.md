@@ -56,10 +56,19 @@ Generated: 2026-01-18 | Updated: 2026-01-19
 - Added 4 new integration tests (2 skipped due to no actions at test location)
 - All 50 tests passing (7 unit + 43 integration)
 
-### 4. Add configuration file support for overriding tool descriptions
+### 4. Add configuration file support for overriding tool descriptions ✅
 **Priority**: Medium (usability enhancement)
-**Status**: Not started
-**Details**: See CLAUDE.md "Configuration File Support" section for specification
+**Status**: Completed
+**Details**:
+- Added NetEscapades.Configuration.Yaml package for YAML support
+- Added `WorkspaceRoot` property to `WorkspaceManager` to track solution directory
+- Created `ToolDescriptionsConfiguration` model for IConfiguration binding
+- Load config hierarchically from `~/.config/csharp-er-mcp.yml` and `<workspace>/.config/csharp-er-mcp.yml`
+- Added `ListToolsFilter` to apply description overrides from configuration
+- Project config only loaded when `--workspace` parameter provided
+- Configuration uses standard .NET IConfiguration with hierarchical key path merging
+- Added 7 comprehensive unit tests for configuration binding
+- All 57 tests passing (14 unit + 43 integration)
 
 ## Pre-1.0 Review Tasks
 
@@ -81,10 +90,10 @@ Generated: 2026-01-18 | Updated: 2026-01-19
 
 ## Notes
 
-- All tests passing (50 tests: 7 unit + 43 integration)
+- All tests passing (57 tests: 14 unit + 43 integration)
 - Build succeeds with 9 pre-existing warnings
-- Current phase: Phase 1-3 complete (workspace init, diagnostics, code actions, apply code actions)
-- Next milestone: Add configuration file support (Phase 4)
+- Current phase: Phase 1-3 complete (workspace init, diagnostics, code actions, apply code actions, tool description configuration)
+- Next milestone: Pre-1.0 usability reviews
 
 ## References
 

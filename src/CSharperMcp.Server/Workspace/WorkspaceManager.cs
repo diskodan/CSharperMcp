@@ -16,6 +16,7 @@ internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
     public MSBuildWorkspace? Workspace => _workspace;
     public bool IsInitialized => _solution != null;
     public IReadOnlyList<string> WorkspaceDiagnostics => _workspaceDiagnostics;
+    public string? WorkspaceRoot { get; private set; }
 
     public async Task<(bool Success, string Message, int ProjectCount)> InitializeAsync(
         string path,
@@ -41,6 +42,7 @@ internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
 
             logger.LogInformation("Loading solution from {Path}", solutionPath);
             _solution = await _workspace.OpenSolutionAsync(solutionPath, cancellationToken: timeoutCts.Token);
+            WorkspaceRoot = Path.GetDirectoryName(solutionPath);
 
             var projectCount = _solution.Projects.Count();
             logger.LogInformation("Successfully loaded solution with {Count} projects", projectCount);
