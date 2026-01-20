@@ -549,10 +549,13 @@ internal class RoslynService(
             return null;
         }
 
-        // Get the full type name
+        // Get the type name (use actual name, not display string which converts System.String to string)
         var typeSymbol = symbol as ITypeSymbol ?? symbol.ContainingType;
-        var typeName = typeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-            .Replace("global::", "");
+        var typeName = typeSymbol != null
+            ? (typeSymbol.ContainingNamespace != null && !typeSymbol.ContainingNamespace.IsGlobalNamespace
+                ? $"{typeSymbol.ContainingNamespace.ToDisplayString()}.{typeSymbol.Name}"
+                : typeSymbol.Name)
+            : null;
 
         // Get symbol kind
         var symbolKind = symbol.Kind.ToString();
@@ -568,8 +571,8 @@ internal class RoslynService(
             _ => null
         };
 
-        // Try to determine package name from assembly identity
-        var package = assembly.Identity is { IsRetargetable: false } ? assembly.Name : null;
+        // Determine package name (only for non-BCL assemblies)
+        var package = IsBclAssembly(assembly.Name) ? null : assembly.Name;
 
         return new DefinitionInfo(
             IsFromWorkspace: false,
@@ -713,18 +716,11 @@ internal class RoslynService(
                 return null;
             }
 
-            // Prepare type name for decompiler (handle generics properly)
-            var fullTypeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                .Replace("global::", "");
-
-            // Convert generic types from "List<T>" to "List`1" format
-            if (fullTypeName.Contains('<'))
-            {
-                var angleBracketIndex = fullTypeName.IndexOf('<');
-                var genericParams = fullTypeName.Substring(angleBracketIndex + 1, fullTypeName.LastIndexOf('>') - angleBracketIndex - 1)
-                    .Split(',').Length;
-                fullTypeName = fullTypeName.Substring(0, angleBracketIndex) + "`" + genericParams;
-            }
+            // Prepare type name for decompiler using metadata name (not display name)
+            // MetadataName already has ` notation for generics (e.g., "List`1")
+            var fullTypeName = typeSymbol.ContainingNamespace != null && !typeSymbol.ContainingNamespace.IsGlobalNamespace
+                ? $"{typeSymbol.ContainingNamespace.ToDisplayString()}.{typeSymbol.MetadataName}"
+                : typeSymbol.MetadataName;
 
             var decompiledSource = decompilerService.DecompileType(assemblyPath, fullTypeName, includeImplementation);
             if (decompiledSource == null)

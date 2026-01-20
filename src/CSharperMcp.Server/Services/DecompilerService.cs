@@ -134,7 +134,7 @@ internal class DecompilerService(WorkspaceManager workspaceManager, ILogger<Deco
             {
                 ThrowOnAssemblyResolveErrors = false,
                 DecompileMemberBodies = includeImplementation,
-                ShowXmlDocumentation = includeImplementation,  // Only show XML docs for full implementation
+                ShowXmlDocumentation = true,  // Always show XML docs (useful for both modes)
                 RemoveDeadCode = false,
                 AlwaysUseBraces = false
             };

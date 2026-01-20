@@ -87,12 +87,24 @@ internal class CodeActionsService(
 
         if (line.HasValue)
         {
-            var startPosition = sourceText.Lines[line.Value - 1].Start + (column ?? 1) - 1;
-            var endPosition = endLine.HasValue && endColumn.HasValue
-                ? sourceText.Lines[endLine.Value - 1].Start + endColumn.Value - 1
-                : startPosition;
+            // Clamp line numbers to valid range
+            var lineCount = sourceText.Lines.Count;
+            var startLine = Math.Max(1, Math.Min(line.Value, lineCount));
+            var startCol = Math.Max(1, column ?? 1);
 
-            textSpan = TextSpan.FromBounds(startPosition, endPosition);
+            var startPosition = sourceText.Lines[startLine - 1].Start + startCol - 1;
+            var endPosition = startPosition;
+
+            if (endLine.HasValue && endColumn.HasValue)
+            {
+                var clampedEndLine = Math.Max(1, Math.Min(endLine.Value, lineCount));
+                var endTextLine = sourceText.Lines[clampedEndLine - 1];
+                var lineLength = endTextLine.Span.Length;
+                var clampedEndCol = Math.Max(1, Math.Min(endColumn.Value, lineLength + 1));
+                endPosition = endTextLine.Start + clampedEndCol - 1;
+            }
+
+            textSpan = TextSpan.FromBounds(Math.Min(startPosition, endPosition), Math.Max(startPosition, endPosition));
         }
         else
         {
