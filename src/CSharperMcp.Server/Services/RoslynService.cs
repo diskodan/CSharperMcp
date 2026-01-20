@@ -566,7 +566,8 @@ internal class RoslynService(
 
     public async Task<TypeMembersInfo?> GetTypeMembersAsync(
         string typeName,
-        bool includeInherited = false)
+        bool includeInherited = false,
+        bool includeImplementation = true)
     {
         if (workspaceManager.CurrentSolution == null)
         {
@@ -625,7 +626,19 @@ internal class RoslynService(
                 return null;
             }
 
-            var sourceCode = typeDeclarationNode.ToFullString();
+            string sourceCode;
+            if (includeImplementation)
+            {
+                // Return full source code
+                sourceCode = typeDeclarationNode.ToFullString();
+            }
+            else
+            {
+                // Return signatures only - extract just the member signatures without bodies
+                sourceCode = ExtractSignaturesOnly(typeDeclarationNode);
+            }
+
+            var lineCount = sourceCode.Split('\n').Length;
             var filePath = syntaxTree.FilePath;
 
             return new TypeMembersInfo(
@@ -635,7 +648,9 @@ internal class RoslynService(
                 assemblyName,
                 null,
                 true,
-                filePath
+                filePath,
+                includeImplementation,
+                lineCount
             );
         }
         else
@@ -682,12 +697,14 @@ internal class RoslynService(
                 .Replace("<", "`")
                 .Split('`')[0];
 
-            var decompiledSource = decompilerService.DecompileType(assemblyPath, fullTypeName);
+            var decompiledSource = decompilerService.DecompileType(assemblyPath, fullTypeName, includeImplementation);
             if (decompiledSource == null)
             {
                 logger.LogWarning("Failed to decompile {TypeName} from {Assembly}", fullTypeName, assemblyPath);
                 return null;
             }
+
+            var lineCount = decompiledSource.Split('\n').Length;
 
             // Determine package name
             string? package = null;
@@ -703,8 +720,213 @@ internal class RoslynService(
                 assemblyName,
                 package,
                 false,
-                null
+                null,
+                includeImplementation,
+                lineCount
             );
         }
+    }
+
+    private static string ExtractSignaturesOnly(Microsoft.CodeAnalysis.SyntaxNode typeDeclarationNode)
+    {
+        // For workspace types with includeImplementation=false, we need to strip method bodies
+        // This is a simplified implementation - we'll use a syntax rewriter to remove method bodies
+
+        using var writer = new System.IO.StringWriter();
+
+        if (typeDeclarationNode is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax typeDecl)
+        {
+            // Write type header (modifiers, name, constraints)
+            var modifiers = typeDecl.Modifiers.ToString().Trim();
+            if (!string.IsNullOrEmpty(modifiers))
+            {
+                writer.Write(modifiers);
+                writer.Write(" ");
+            }
+            writer.Write(typeDecl.Keyword.ToString().Trim());
+            writer.Write(" ");
+            writer.Write(typeDecl.Identifier.ToString().Trim());
+            if (typeDecl.TypeParameterList != null)
+            {
+                writer.Write(typeDecl.TypeParameterList.ToString().Trim());
+            }
+            if (typeDecl.BaseList != null)
+            {
+                writer.Write(" ");
+                writer.Write(typeDecl.BaseList.ToString().Trim());
+            }
+            if (typeDecl.ConstraintClauses.Any())
+            {
+                writer.Write(" ");
+                writer.Write(typeDecl.ConstraintClauses.ToString().Trim());
+            }
+            writer.WriteLine();
+            writer.WriteLine("{");
+
+            // Write members without bodies
+            foreach (var member in typeDecl.Members)
+            {
+                if (member is Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax method)
+                {
+                    // Method: write signature only
+                    writer.Write("    ");
+                    var methodModifiers = method.Modifiers.ToString().Trim();
+                    if (!string.IsNullOrEmpty(methodModifiers))
+                    {
+                        writer.Write(methodModifiers);
+                        writer.Write(" ");
+                    }
+                    writer.Write(method.ReturnType.ToString().Trim());
+                    writer.Write(" ");
+                    writer.Write(method.Identifier.ToString().Trim());
+                    if (method.TypeParameterList != null)
+                    {
+                        writer.Write(method.TypeParameterList.ToString().Trim());
+                    }
+                    writer.Write(method.ParameterList.ToString().Trim());
+                    if (method.ConstraintClauses.Any())
+                    {
+                        writer.Write(" ");
+                        writer.Write(method.ConstraintClauses.ToString().Trim());
+                    }
+                    writer.WriteLine(";");
+                    writer.WriteLine();
+                }
+                else if (member is Microsoft.CodeAnalysis.CSharp.Syntax.PropertyDeclarationSyntax property)
+                {
+                    // Property: write signature with accessors but no bodies
+                    writer.Write("    ");
+                    var propModifiers = property.Modifiers.ToString().Trim();
+                    if (!string.IsNullOrEmpty(propModifiers))
+                    {
+                        writer.Write(propModifiers);
+                        writer.Write(" ");
+                    }
+                    writer.Write(property.Type.ToString().Trim());
+                    writer.Write(" ");
+                    writer.Write(property.Identifier.ToString().Trim());
+
+                    if (property.AccessorList != null)
+                    {
+                        writer.Write(" { ");
+                        foreach (var accessor in property.AccessorList.Accessors)
+                        {
+                            var accessorModifiers = accessor.Modifiers.ToString().Trim();
+                            if (!string.IsNullOrEmpty(accessorModifiers))
+                            {
+                                writer.Write(accessorModifiers);
+                                writer.Write(" ");
+                            }
+                            writer.Write(accessor.Keyword.ToString().Trim());
+                            writer.Write("; ");
+                        }
+                        writer.Write("}");
+                    }
+                    else if (property.ExpressionBody != null)
+                    {
+                        writer.Write(" { get; }");
+                    }
+
+                    writer.WriteLine();
+                    writer.WriteLine();
+                }
+                else if (member is Microsoft.CodeAnalysis.CSharp.Syntax.ConstructorDeclarationSyntax constructor)
+                {
+                    // Constructor: write signature only
+                    writer.Write("    ");
+                    var ctorModifiers = constructor.Modifiers.ToString().Trim();
+                    if (!string.IsNullOrEmpty(ctorModifiers))
+                    {
+                        writer.Write(ctorModifiers);
+                        writer.Write(" ");
+                    }
+                    writer.Write(constructor.Identifier.ToString().Trim());
+                    writer.Write(constructor.ParameterList.ToString().Trim());
+                    if (constructor.Initializer != null)
+                    {
+                        writer.Write(" ");
+                        writer.Write(constructor.Initializer.ToString().Trim());
+                    }
+                    writer.WriteLine(";");
+                    writer.WriteLine();
+                }
+                else if (member is Microsoft.CodeAnalysis.CSharp.Syntax.FieldDeclarationSyntax field)
+                {
+                    // Field: keep as-is (usually just declarations)
+                    writer.Write("    ");
+                    writer.WriteLine(field.ToString().Trim());
+                    writer.WriteLine();
+                }
+                else if (member is Microsoft.CodeAnalysis.CSharp.Syntax.EventDeclarationSyntax evt)
+                {
+                    // Event: write declaration
+                    writer.Write("    ");
+                    var evtModifiers = evt.Modifiers.ToString().Trim();
+                    if (!string.IsNullOrEmpty(evtModifiers))
+                    {
+                        writer.Write(evtModifiers);
+                        writer.Write(" ");
+                    }
+                    writer.Write("event ");
+                    writer.Write(evt.Type.ToString().Trim());
+                    writer.Write(" ");
+                    writer.Write(evt.Identifier.ToString().Trim());
+                    writer.WriteLine(";");
+                    writer.WriteLine();
+                }
+                else if (member is Microsoft.CodeAnalysis.CSharp.Syntax.IndexerDeclarationSyntax indexer)
+                {
+                    // Indexer: write signature
+                    writer.Write("    ");
+                    var idxModifiers = indexer.Modifiers.ToString().Trim();
+                    if (!string.IsNullOrEmpty(idxModifiers))
+                    {
+                        writer.Write(idxModifiers);
+                        writer.Write(" ");
+                    }
+                    writer.Write(indexer.Type.ToString().Trim());
+                    writer.Write(" this");
+                    writer.Write(indexer.ParameterList.ToString().Trim());
+                    writer.Write(" { ");
+                    if (indexer.AccessorList != null)
+                    {
+                        foreach (var accessor in indexer.AccessorList.Accessors)
+                        {
+                            var accModifiers = accessor.Modifiers.ToString().Trim();
+                            if (!string.IsNullOrEmpty(accModifiers))
+                            {
+                                writer.Write(accModifiers);
+                                writer.Write(" ");
+                            }
+                            writer.Write(accessor.Keyword.ToString().Trim());
+                            writer.Write("; ");
+                        }
+                    }
+                    writer.WriteLine("}");
+                    writer.WriteLine();
+                }
+                else
+                {
+                    // Other members (nested types, etc.): keep as-is but recursively process if needed
+                    writer.Write("    ");
+                    writer.WriteLine(member.ToString().Trim());
+                    writer.WriteLine();
+                }
+            }
+
+            writer.WriteLine("}");
+        }
+        else if (typeDeclarationNode is Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax enumDecl)
+        {
+            // Enums: keep full declaration (they don't have method bodies)
+            return enumDecl.ToFullString();
+        }
+        else if (typeDeclarationNode is Microsoft.CodeAnalysis.CSharp.Syntax.DelegateDeclarationSyntax delegateDecl)
+        {
+            // Delegates: keep full declaration (just a signature)
+            return delegateDecl.ToFullString();
+        }
+
+        return writer.ToString();
     }
 }

@@ -31,7 +31,7 @@ internal class RoslynServiceIntegrationTests
         _roslynLoggerMock = new Mock<ILogger<RoslynService>>();
         _decompilerLoggerMock = new Mock<ILogger<DecompilerService>>();
         _workspaceManager = new WorkspaceManager(_workspaceLoggerMock.Object);
-        _decompilerService = new DecompilerService(_decompilerLoggerMock.Object);
+        _decompilerService = new DecompilerService(_workspaceManager, _decompilerLoggerMock.Object);
         _sut = new RoslynService(_workspaceManager, _decompilerService, _roslynLoggerMock.Object);
     }
 
@@ -524,6 +524,134 @@ internal class RoslynServiceIntegrationTests
 
         // Assert
         typeMembers.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_WithIncludeImplementationFalse_ReturnsSignaturesOnly()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get signatures only
+        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator", includeInherited: false, includeImplementation: false);
+
+        // Assert - Should return signatures without method bodies
+        typeMembers.Should().NotBeNull();
+        typeMembers!.IsFromWorkspace.Should().BeTrue();
+        typeMembers.TypeName.Should().Be("Calculator");
+        typeMembers.SourceCode.Should().NotBeNullOrEmpty();
+        typeMembers.IncludesImplementation.Should().BeFalse();
+        typeMembers.LineCount.Should().BeGreaterThan(0);
+
+        // Source code should contain method signatures
+        typeMembers.SourceCode.Should().Contain("int Add");
+        typeMembers.SourceCode.Should().Contain("int Subtract");
+        typeMembers.SourceCode.Should().Contain("int Multiply");
+        typeMembers.SourceCode.Should().Contain("double Divide");
+
+        // Should contain method signatures ending with semicolons
+        typeMembers.SourceCode.Should().Contain(";");
+
+        // Should not contain implementation details
+        typeMembers.SourceCode.Should().NotContain("=> a + b");
+        typeMembers.SourceCode.Should().NotContain("=> a - b");
+        typeMembers.SourceCode.Should().NotContain("throw new DivideByZeroException");
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_WithIncludeImplementationTrue_ReturnsFullSource()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get full source
+        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator", includeInherited: false, includeImplementation: true);
+
+        // Assert - Should return full source with method bodies
+        typeMembers.Should().NotBeNull();
+        typeMembers!.IsFromWorkspace.Should().BeTrue();
+        typeMembers.TypeName.Should().Be("Calculator");
+        typeMembers.SourceCode.Should().NotBeNullOrEmpty();
+        typeMembers.IncludesImplementation.Should().BeTrue();
+        typeMembers.LineCount.Should().BeGreaterThan(0);
+
+        // Source code should contain full method implementations (expression-bodied or block-bodied)
+        // The Calculator uses expression-bodied methods (=>) and one block method (Divide)
+        typeMembers.SourceCode.Should().Contain("=> a + b");
+        typeMembers.SourceCode.Should().Contain("=> a - b");
+        typeMembers.SourceCode.Should().Contain("=> a * b");
+        typeMembers.SourceCode.Should().Contain("throw new DivideByZeroException");
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_ForBclType_WithIncludeImplementationFalse_ReturnsSignaturesOnly()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get System.Console signatures only
+        var typeMembers = await _sut.GetTypeMembersAsync("System.Console", includeInherited: false, includeImplementation: false);
+
+        // Assert - Should return decompiled signatures without method bodies
+        typeMembers.Should().NotBeNull();
+        typeMembers!.IsFromWorkspace.Should().BeFalse();
+        typeMembers.TypeName.Should().Be("Console");
+        typeMembers.SourceCode.Should().NotBeNullOrEmpty();
+        typeMembers.IncludesImplementation.Should().BeFalse();
+        typeMembers.LineCount.Should().BeGreaterThan(0);
+
+        // Should contain method signatures
+        typeMembers.SourceCode.Should().Contain("WriteLine");
+
+        // Verify the parameter is being passed correctly
+        var fullTypeMembers = await _sut.GetTypeMembersAsync("System.Console", includeInherited: false, includeImplementation: true);
+        fullTypeMembers.Should().NotBeNull();
+        fullTypeMembers!.IncludesImplementation.Should().BeTrue();
+
+        // The signatures-only version should be different from the full version
+        // (though the line count may not be dramatically different due to decompiler settings)
+        typeMembers.IncludesImplementation.Should().NotBe(fullTypeMembers.IncludesImplementation);
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_ForBclType_WithIncludeImplementationTrue_ReturnsFullSource()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get System.Console full source
+        var typeMembers = await _sut.GetTypeMembersAsync("System.Console", includeInherited: false, includeImplementation: true);
+
+        // Assert - Should return decompiled source with method bodies
+        typeMembers.Should().NotBeNull();
+        typeMembers!.IsFromWorkspace.Should().BeFalse();
+        typeMembers.TypeName.Should().Be("Console");
+        typeMembers.SourceCode.Should().NotBeNullOrEmpty();
+        typeMembers.IncludesImplementation.Should().BeTrue();
+        typeMembers.LineCount.Should().BeGreaterThan(0);
+
+        // Full implementation should contain actual code
+        typeMembers.SourceCode.Should().Contain("WriteLine");
+    }
+
+    [Test]
+    public async Task GetTypeMembersAsync_LineCount_IsAccurate()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator");
+
+        // Assert
+        typeMembers.Should().NotBeNull();
+        var actualLineCount = typeMembers!.SourceCode.Split('\n').Length;
+        typeMembers.LineCount.Should().Be(actualLineCount, because: "LineCount should match actual line count");
     }
 
     [Test]

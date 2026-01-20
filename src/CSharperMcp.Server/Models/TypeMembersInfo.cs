@@ -24,5 +24,11 @@ internal record TypeMembersInfo(
     bool IsFromWorkspace,
 
     /// <summary>File path if from workspace, null if decompiled</summary>
-    string? FilePath
+    string? FilePath,
+
+    /// <summary>Whether the source code includes implementation details or just signatures</summary>
+    bool IncludesImplementation,
+
+    /// <summary>Number of lines in the source code (for size estimation)</summary>
+    int LineCount
 );
