@@ -32,6 +32,11 @@ for (int i = 0; i < args.Length; i++)
     if (args[i] == "--workspace" && i + 1 < args.Length)
     {
         workspacePath = args[i + 1];
+        if (workspacePath == "$(pwd)" || workspacePath == "${workspaceFolder}")
+        {
+            //shrug
+            workspacePath = Environment.CurrentDirectory;
+        }
         break;
     }
 }
@@ -53,28 +58,26 @@ if (workspacePath != null)
     builder.Configuration.AddInMemoryCollection(
         new Dictionary<string, string?> { { "tools:initialize_workspace:isEnabled", "false" } }
     );
-}
 
-// Configure workspace options from command-line arguments
-builder.Services.Configure<WorkspaceConfiguration>(options =>
-{
-    // Parse --workspace parameter
-    for (int i = 0; i < args.Length; i++)
+    // Configure workspace options from command-line arguments
+    builder.Services.Configure<WorkspaceConfiguration>(options =>
     {
-        if (args[i] == "--workspace" && i + 1 < args.Length)
-        {
-            options.InitialWorkspacePath = args[i + 1];
-            break;
-        }
-    }
-});
+        options.InitialWorkspacePath = workspacePath;
+    });
+}
 
 // Configure MCP server options with default instructions (later configuration overrides earlier)
 // 1. Set default server instructions
 builder.Services.Configure<McpServerOptions>(options =>
 {
+    var initWorkspacePart =
+        workspacePath == null
+            ? @"
+IMPORTANT: All tools require an initialized workspace. Call initialize_workspace first."
+            : "";
     options.ServerInstructions =
-        @"This MCP server provides semantic C# language server capabilities for LLMs.
+        $@"This MCP server provides semantic C# language server capabilities for LLMs.
+{initWorkspacePart}
 
 Features:
 - Workspace initialization from .sln or .csproj files
@@ -107,6 +110,7 @@ builder.Services.AddLogging(logging =>
         options.LogToStandardErrorThreshold = LogLevel.Trace;
     });
     logging.SetMinimumLevel(LogLevel.Information);
+    builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.None);
 });
 
 // Register services that tools depend on
