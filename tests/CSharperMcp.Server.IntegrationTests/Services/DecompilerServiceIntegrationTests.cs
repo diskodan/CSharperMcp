@@ -255,16 +255,16 @@ internal class DecompilerServiceIntegrationTests
     }
 
     [Test]
-    public async Task DecompileType_SyncMethod_ShouldWorkWithIncludeImplementation()
+    public void DecompileType_SyncMethod_ShouldWorkWithIncludeImplementation()
     {
-        // Arrange
+        // Arrange - Get System.String from current runtime
         const string typeName = "System.String";
-        const string assemblyPath = "/usr/local/share/dotnet/shared/Microsoft.NETCore.App/10.0.0/System.Private.CoreLib.dll";
+        var assemblyPath = typeof(string).Assembly.Location;
 
-        // Skip test if assembly doesn't exist at expected path
-        if (!File.Exists(assemblyPath))
+        // Skip test if assembly path is empty (should never happen)
+        if (string.IsNullOrEmpty(assemblyPath))
         {
-            Assert.Ignore($"Assembly not found at {assemblyPath}");
+            Assert.Ignore("Could not determine System.Private.CoreLib.dll location");
         }
 
         // Act
@@ -342,14 +342,14 @@ internal class DecompilerServiceIntegrationTests
     [Test]
     public void IsLikelyObfuscated_ShouldNotFlagSystemStringAsObfuscated()
     {
-        // Arrange - Get real System.String decompiled source
+        // Arrange - Get real System.String decompiled source from current runtime
         const string typeName = "System.String";
-        const string assemblyPath = "/usr/local/share/dotnet/shared/Microsoft.NETCore.App/10.0.0/System.Private.CoreLib.dll";
+        var assemblyPath = typeof(string).Assembly.Location;
 
-        // Skip test if assembly doesn't exist at expected path
-        if (!File.Exists(assemblyPath))
+        // Skip test if assembly path is empty (should never happen)
+        if (string.IsNullOrEmpty(assemblyPath))
         {
-            Assert.Ignore($"Assembly not found at {assemblyPath}");
+            Assert.Ignore("Could not determine System.Private.CoreLib.dll location");
         }
 
         // Act
@@ -370,14 +370,14 @@ internal class DecompilerServiceIntegrationTests
     [Test]
     public void IsLikelyObfuscated_ShouldNotFlagSystemLinqEnumerableAsObfuscated()
     {
-        // Arrange - System.Linq.Enumerable is a complex BCL type with many methods
+        // Arrange - System.Linq.Enumerable is a complex BCL type with many methods from current runtime
         const string typeName = "System.Linq.Enumerable";
-        const string assemblyPath = "/usr/local/share/dotnet/shared/Microsoft.NETCore.App/10.0.0/System.Linq.dll";
+        var assemblyPath = typeof(Enumerable).Assembly.Location;
 
-        // Skip test if assembly doesn't exist at expected path
-        if (!File.Exists(assemblyPath))
+        // Skip test if assembly path is empty (should never happen)
+        if (string.IsNullOrEmpty(assemblyPath))
         {
-            Assert.Ignore($"Assembly not found at {assemblyPath}");
+            Assert.Ignore("Could not determine System.Linq.dll location");
         }
 
         // Act
