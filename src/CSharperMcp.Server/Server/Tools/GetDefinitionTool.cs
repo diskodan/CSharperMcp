@@ -10,7 +10,7 @@ namespace CSharperMcp.Server.Tools;
 internal static class GetDefinitionTool
 {
     [McpServerTool]
-    [Description("Go to the definition of a symbol. Returns source file location for workspace symbols, or decompiled source code for DLL types (BCL, NuGet packages). Use either (file + line + column) OR symbolName, not both.")]
+    [Description("Get definition location for a symbol. For workspace symbols, returns file location. For DLL symbols (BCL, NuGet packages), returns metadata (assembly, type name, kind, signature). Use get_decompiled_source to get source code for DLL symbols. Use either (file + line + column) OR symbolName, not both.")]
     public static async Task<string> GetDefinition(
         RoslynService roslynService,
         ILogger<RoslynService> logger,
@@ -63,31 +63,31 @@ internal static class GetDefinitionTool
                 return JsonSerializer.Serialize(new { success = false, message = "Symbol not found" });
             }
 
-            if (definition.IsSourceLocation)
+            if (definition.IsFromWorkspace)
             {
                 // Workspace symbol - return file location
                 return JsonSerializer.Serialize(new
                 {
                     success = true,
-                    isSourceLocation = true,
+                    isFromWorkspace = true,
                     filePath = definition.FilePath,
                     line = definition.Line,
                     column = definition.Column,
                     assembly = definition.Assembly
                 });
             }
-            else
+
+            // DLL symbol - return metadata only (no decompiled source)
+            return JsonSerializer.Serialize(new
             {
-                // DLL symbol - return decompiled source
-                return JsonSerializer.Serialize(new
-                {
-                    success = true,
-                    isSourceLocation = false,
-                    decompiledSource = definition.DecompiledSource,
-                    assembly = definition.Assembly,
-                    package = definition.Package
-                });
-            }
+                success = true,
+                isFromWorkspace = false,
+                assembly = definition.Assembly,
+                typeName = definition.TypeName,
+                symbolKind = definition.SymbolKind,
+                signature = definition.Signature,
+                package = definition.Package
+            });
         }
         catch (Exception ex)
         {

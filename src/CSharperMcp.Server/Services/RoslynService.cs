@@ -433,7 +433,7 @@ internal class RoslynService(
         return string.Join(Environment.NewLine, lines);
     }
 
-    public async Task<DefinitionInfo?> GetDefinitionAsync(
+    public virtual async Task<DefinitionInfo?> GetDefinitionAsync(
         string? filePath = null,
         int? line = null,
         int? column = null,
@@ -506,80 +506,62 @@ internal class RoslynService(
             var sourceFilePath = location.SourceTree?.FilePath ?? "";
             var sourceLine = lineSpan.StartLinePosition.Line + 1;
             var sourceColumn = lineSpan.StartLinePosition.Character + 1;
-            var assembly = symbol.ContainingAssembly?.Name;
+            var assemblyName = symbol.ContainingAssembly?.Name ?? "";
 
-            return DefinitionInfo.FromSourceLocation(sourceFilePath, sourceLine, sourceColumn, assembly);
+            return new DefinitionInfo(
+                IsFromWorkspace: true,
+                FilePath: sourceFilePath,
+                Line: sourceLine,
+                Column: sourceColumn,
+                Assembly: assemblyName,
+                TypeName: null,
+                SymbolKind: null,
+                Signature: null,
+                Package: null
+            );
         }
-        else
+
+        // Symbol is in metadata (DLL) - return metadata only (no decompilation)
+        var assembly = symbol.ContainingAssembly;
+        if (assembly == null)
         {
-            // Symbol is in metadata (DLL) - decompile it
-            var assembly = symbol.ContainingAssembly;
-            if (assembly == null)
-            {
-                logger.LogWarning("Symbol has no containing assembly");
-                return null;
-            }
-
-            // Get assembly file path from metadata reference
-            string? assemblyPath = null;
-            foreach (var project in workspaceManager.CurrentSolution.Projects)
-            {
-                var compilation = await project.GetCompilationAsync();
-                if (compilation == null) continue;
-
-                foreach (var reference in compilation.References)
-                {
-                    if (reference is Microsoft.CodeAnalysis.PortableExecutableReference peRef)
-                    {
-                        // Check if this reference matches our assembly
-                        var refAssembly = compilation.GetAssemblyOrModuleSymbol(reference) as IAssemblySymbol;
-                        if (refAssembly?.Identity.Equals(assembly.Identity) == true)
-                        {
-                            assemblyPath = peRef.FilePath;
-                            break;
-                        }
-                    }
-                }
-
-                if (assemblyPath != null) break;
-            }
-
-            if (assemblyPath.IsNullOrEmpty())
-            {
-                logger.LogWarning("Could not find assembly path for {Assembly}", assembly.Name);
-                return null;
-            }
-
-            // Get the full type name for decompilation
-            // For nested types or members, we need to decompile the containing type
-            var typeToDecompile = symbol as ITypeSymbol ?? symbol.ContainingType;
-            if (typeToDecompile == null)
-            {
-                logger.LogWarning("Symbol {Symbol} has no containing type to decompile", symbol.Name);
-                return null;
-            }
-
-            var fullTypeName = typeToDecompile.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                .Replace("global::", "")
-                .Replace("<", "`")
-                .Split('`')[0]; // Remove generic arity notation for decompiler
-
-            var decompiledSource = decompilerService.DecompileType(assemblyPath, fullTypeName);
-            if (decompiledSource == null)
-            {
-                logger.LogWarning("Failed to decompile {TypeName} from {Assembly}", fullTypeName, assemblyPath);
-                return null;
-            }
-
-            // Try to determine package name from assembly identity
-            string? package = null;
-            if (assembly.Identity != null && !assembly.Identity.IsRetargetable)
-            {
-                package = assembly.Name;
-            }
-
-            return DefinitionInfo.FromDecompiledSource(decompiledSource, assembly.Name, package);
+            logger.LogWarning("Symbol has no containing assembly");
+            return null;
         }
+
+        // Get the full type name
+        var typeSymbol = symbol as ITypeSymbol ?? symbol.ContainingType;
+        var typeName = typeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            .Replace("global::", "");
+
+        // Get symbol kind
+        var symbolKind = symbol.Kind.ToString();
+
+        // Get a brief signature
+        var signature = symbol switch
+        {
+            IMethodSymbol method => method.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+            IPropertySymbol property => property.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+            ITypeSymbol type => type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+            IFieldSymbol field => field.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+            IEventSymbol evt => evt.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+            _ => null
+        };
+
+        // Try to determine package name from assembly identity
+        var package = assembly.Identity is { IsRetargetable: false } ? assembly.Name : null;
+
+        return new DefinitionInfo(
+            IsFromWorkspace: false,
+            FilePath: null,
+            Line: null,
+            Column: null,
+            Assembly: assembly.Name,
+            TypeName: typeName,
+            SymbolKind: symbolKind,
+            Signature: signature,
+            Package: package
+        );
     }
 
     public async Task<TypeMembersInfo?> GetTypeMembersAsync(

@@ -6,8 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace CSharperMcp.Server.UnitTests.Tools;
 
 /// <summary>
-/// Tests for parameter validation in GetDefinitionTool.
-/// These tests verify that the tool correctly validates mutually exclusive parameters.
+/// Tests for parameter validation and response structure in GetDefinitionTool.
+/// These tests verify that the tool correctly validates mutually exclusive parameters
+/// and returns the correct structure for workspace and DLL symbols.
 /// </summary>
 internal class GetDefinitionToolTests
 {
@@ -132,4 +133,11 @@ internal class GetDefinitionToolTests
         response.GetProperty("message").GetString().Should()
             .Contain("Provide either (file + line + column) OR symbolName, not both");
     }
+
+    // NOTE: Response structure tests are covered by integration tests.
+    // Unit tests here focus on parameter validation only.
+    // See RoslynServiceIntegrationTests for tests that verify:
+    // - Workspace symbols return file location (isFromWorkspace=true, filePath, line, column)
+    // - DLL symbols return metadata (isFromWorkspace=false, assembly, typeName, symbolKind, signature, package)
+    // - No decompiled source is included in responses
 }

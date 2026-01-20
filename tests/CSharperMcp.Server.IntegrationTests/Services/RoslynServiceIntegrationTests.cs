@@ -353,7 +353,7 @@ internal class RoslynServiceIntegrationTests
 
         // Assert - Should return source location of Add method in Calculator.cs
         definition.Should().NotBeNull();
-        definition!.IsSourceLocation.Should().BeTrue();
+        definition!.IsFromWorkspace.Should().BeTrue();
         definition.FilePath.Should().EndWith("Calculator.cs");
         definition.Line.Should().Be(5); // Add method is on line 5 in Calculator.cs
         definition.Column.Should().BeGreaterThan(0);
@@ -361,7 +361,7 @@ internal class RoslynServiceIntegrationTests
     }
 
     [Test]
-    public async Task GetDefinitionAsync_ForBclType_ReturnsDecompiledSource()
+    public async Task GetDefinitionAsync_ForBclType_ReturnsMetadata()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
@@ -370,16 +370,22 @@ internal class RoslynServiceIntegrationTests
         // Act - Get definition for System.Console by name (used in Program.cs)
         var definition = await _sut.GetDefinitionAsync(symbolName: "System.Console");
 
-        // Assert - Should return decompiled source from BCL
+        // Assert - Should return metadata from BCL (no decompiled source)
         definition.Should().NotBeNull();
-        definition!.IsSourceLocation.Should().BeFalse();
-        definition.DecompiledSource.Should().NotBeNullOrEmpty();
-        definition.DecompiledSource.Should().Contain("class Console");
+        definition!.IsFromWorkspace.Should().BeFalse();
         definition.Assembly.Should().Contain("System");
+        definition.TypeName.Should().Contain("Console");
+        definition.SymbolKind.Should().NotBeNullOrEmpty();
+        definition.Signature.Should().NotBeNullOrEmpty();
+
+        // Verify no decompiled source is present
+        definition.FilePath.Should().BeNull();
+        definition.Line.Should().BeNull();
+        definition.Column.Should().BeNull();
     }
 
     [Test]
-    public async Task GetDefinitionAsync_ForNuGetType_ReturnsDecompiledSource()
+    public async Task GetDefinitionAsync_ForNuGetType_ReturnsMetadata()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SolutionWithNuGet"), "SolutionWithNuGet.sln");
@@ -388,13 +394,19 @@ internal class RoslynServiceIntegrationTests
         // Act - Get definition for JObject from Newtonsoft.Json
         var definition = await _sut.GetDefinitionAsync(symbolName: "Newtonsoft.Json.Linq.JObject");
 
-        // Assert - Should return decompiled source from NuGet package
+        // Assert - Should return metadata from NuGet package (no decompiled source)
         definition.Should().NotBeNull();
-        definition!.IsSourceLocation.Should().BeFalse();
-        definition.DecompiledSource.Should().NotBeNullOrEmpty();
-        definition.DecompiledSource.Should().Contain("JObject");
+        definition!.IsFromWorkspace.Should().BeFalse();
         definition.Assembly.Should().Be("Newtonsoft.Json");
+        definition.TypeName.Should().Contain("JObject");
+        definition.SymbolKind.Should().NotBeNullOrEmpty();
+        definition.Signature.Should().NotBeNullOrEmpty();
         definition.Package.Should().Be("Newtonsoft.Json");
+
+        // Verify no decompiled source is present
+        definition.FilePath.Should().BeNull();
+        definition.Line.Should().BeNull();
+        definition.Column.Should().BeNull();
     }
 
     [Test]
@@ -423,7 +435,7 @@ internal class RoslynServiceIntegrationTests
 
         // Assert - Should return source location of Calculator class
         definition.Should().NotBeNull();
-        definition!.IsSourceLocation.Should().BeTrue();
+        definition!.IsFromWorkspace.Should().BeTrue();
         definition.FilePath.Should().EndWith("Calculator.cs");
         definition.Line.Should().Be(3); // Calculator class starts at line 3
         definition.Assembly.Should().Be("SimpleProject");
