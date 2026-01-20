@@ -94,10 +94,9 @@ internal class DecompilerService(WorkspaceManager workspaceManager, ILogger<Deco
             }
 
             // Determine if this is a NuGet package (not BCL)
+            // BCL assemblies are in the shared framework directory or are known framework assemblies
             string? package = null;
-            if (actualAssemblyName != null &&
-                !actualAssemblyName.StartsWith("System") &&
-                !actualAssemblyName.StartsWith("Microsoft."))
+            if (actualAssemblyName != null && !IsBclAssembly(actualAssemblyName, assemblyPath))
             {
                 package = actualAssemblyName;
             }
@@ -254,6 +253,38 @@ internal class DecompilerService(WorkspaceManager workspaceManager, ILogger<Deco
         }
 
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Determines if an assembly is part of the BCL (Base Class Library) or is a third-party package.
+    /// </summary>
+    private static bool IsBclAssembly(string assemblyName, string assemblyPath)
+    {
+        // Known BCL assembly name patterns
+        if (assemblyName.StartsWith("System.") ||
+            assemblyName == "System" ||
+            assemblyName == "mscorlib" ||
+            assemblyName == "netstandard" ||
+            assemblyName.StartsWith("Microsoft.CSharp") ||
+            assemblyName.StartsWith("Microsoft.VisualBasic") ||
+            assemblyName.StartsWith("Microsoft.Win32"))
+        {
+            return true;
+        }
+
+        // Check if the assembly is in the shared framework directory
+        // .NET SDK assemblies are typically in paths like:
+        // - /usr/local/share/dotnet/shared/Microsoft.NETCore.App/
+        // - /usr/local/share/dotnet/packs/Microsoft.NETCore.App.Ref/
+        if (assemblyPath.Contains("/dotnet/shared/Microsoft.NETCore.App/") ||
+            assemblyPath.Contains("/dotnet/packs/Microsoft.NETCore.App.Ref/") ||
+            assemblyPath.Contains(@"\dotnet\shared\Microsoft.NETCore.App\") ||
+            assemblyPath.Contains(@"\dotnet\packs\Microsoft.NETCore.App.Ref\"))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

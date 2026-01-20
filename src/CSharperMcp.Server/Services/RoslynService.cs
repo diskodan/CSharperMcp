@@ -202,6 +202,20 @@ internal class RoslynService(
         return null;
     }
 
+    /// <summary>
+    /// Determines if an assembly is part of the BCL (Base Class Library).
+    /// </summary>
+    private static bool IsBclAssembly(string assemblyName)
+    {
+        return assemblyName.StartsWith("System.") ||
+               assemblyName == "System" ||
+               assemblyName == "mscorlib" ||
+               assemblyName == "netstandard" ||
+               assemblyName.StartsWith("Microsoft.CSharp") ||
+               assemblyName.StartsWith("Microsoft.VisualBasic") ||
+               assemblyName.StartsWith("Microsoft.Win32");
+    }
+
     private static Models.SymbolInfo MapSymbolToSymbolInfo(ISymbol symbol, bool includeDocumentation)
     {
         var kind = symbol.Kind.ToString();
@@ -213,12 +227,18 @@ internal class RoslynService(
         var assembly = symbol.ContainingAssembly?.Name;
         string? package = null;
 
-        // Try to determine NuGet package from assembly identity
-        var assemblyIdentity = symbol.ContainingAssembly?.Identity;
-        if (assemblyIdentity != null && !assemblyIdentity.IsRetargetable)
+        // Only set package for non-BCL assemblies (actual NuGet packages or user assemblies)
+        if (assembly != null && !IsBclAssembly(assembly))
         {
-            // For NuGet packages, the assembly name often matches the package name
-            package = assembly;
+            // Check if this is a workspace assembly or a NuGet package
+            var assemblyLocations = symbol.ContainingAssembly?.Locations ?? [];
+            var isAssemblyFromWorkspace = assemblyLocations.Any(loc => loc.IsInSource);
+
+            // Only set package if NOT from workspace (i.e., it's a NuGet package)
+            if (!isAssemblyFromWorkspace)
+            {
+                package = assembly;
+            }
         }
 
         // Only include documentation if requested
