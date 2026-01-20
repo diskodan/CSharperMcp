@@ -117,11 +117,11 @@ After researching the current landscape:
 
 **Find all locations where a symbol is used.**
 
-**MCP Tool: `find_references`**
+**MCP Tool: `find_symbol_usages`**
 ```json
 {
-  "name": "find_references",
-  "description": "Find all references to a symbol",
+  "name": "find_symbol_usages",
+  "description": "Find all usages of a symbol (not implementations)",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -146,11 +146,11 @@ After researching the current landscape:
 
 **Navigate to where a symbol is defined, including decompiled sources for DLL types.**
 
-**MCP Tool: `get_definition`**
+**MCP Tool: `get_definition_location`**
 ```json
 {
-  "name": "get_definition",
-  "description": "Get the definition of a symbol. For DLL types, returns decompiled source.",
+  "name": "get_definition_location",
+  "description": "Navigate to the definition location of a symbol. For workspace symbols, returns file location for navigation. For DLL symbols, returns metadata.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -502,7 +502,7 @@ Register extension method documentation as MCP resources:
 │                        MCP Server                                │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │                    Tool Handlers                            ││
-│  │  get_symbol_info | find_references | get_definition | ...   ││
+│  │  get_symbol_info | find_symbol_usages | get_definition_location | ...   ││
 │  └─────────────────────────────────────────────────────────────┘│
 │                              │                                   │
 │  ┌─────────────────────────────────────────────────────────────┐│

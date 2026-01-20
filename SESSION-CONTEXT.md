@@ -119,8 +119,8 @@
 Not yet started. From CLAUDE.md:
 
 3. **`get_symbol_info`** - Type info at location or by name
-4. **`find_references`** - All usages of a symbol
-5. **`get_definition`** - Go to definition (source or decompiled)
+4. **`find_symbol_usages`** - All usages of a symbol
+5. **`get_definition_location`** - Navigate to definition location
 6. **`get_type_members`** - Full type definition with all members
 
 ## Phase 4 Work (Search & Navigation)

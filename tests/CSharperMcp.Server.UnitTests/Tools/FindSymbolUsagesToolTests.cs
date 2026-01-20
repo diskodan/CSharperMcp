@@ -6,14 +6,13 @@ using Microsoft.Extensions.Logging;
 namespace CSharperMcp.Server.UnitTests.Tools;
 
 /// <summary>
-/// Tests for parameter validation and response structure in GetDefinitionTool.
-/// These tests verify that the tool correctly validates mutually exclusive parameters
-/// and returns the correct structure for workspace and DLL symbols.
+/// Tests for parameter validation in FindSymbolUsagesTool.
+/// These tests verify that the tool correctly validates mutually exclusive parameters.
 /// </summary>
-internal class GetDefinitionToolTests
+internal class FindSymbolUsagesToolTests
 {
     [Test]
-    public async Task GetDefinition_ShouldReturnError_WhenBothLocationAndSymbolNameProvided()
+    public async Task FindSymbolUsages_ShouldReturnError_WhenBothLocationAndSymbolNameProvided()
     {
         // Arrange
         const string file = "/path/to/file.cs";
@@ -22,7 +21,7 @@ internal class GetDefinitionToolTests
         const string symbolName = "System.String";
 
         // Act
-        var result = await GetDefinitionTool.GetDefinition(
+        var result = await FindSymbolUsagesTool.FindSymbolUsages(
             null!,  // Service won't be called due to validation error
             Mock.Of<ILogger<RoslynService>>(),
             file,
@@ -38,10 +37,10 @@ internal class GetDefinitionToolTests
     }
 
     [Test]
-    public async Task GetDefinition_ShouldReturnError_WhenNeitherLocationNorSymbolNameProvided()
+    public async Task FindSymbolUsages_ShouldReturnError_WhenNeitherLocationNorSymbolNameProvided()
     {
         // Act
-        var result = await GetDefinitionTool.GetDefinition(
+        var result = await FindSymbolUsagesTool.FindSymbolUsages(
             null!,  // Service won't be called due to validation error
             Mock.Of<ILogger<RoslynService>>());
 
@@ -53,13 +52,13 @@ internal class GetDefinitionToolTests
     }
 
     [Test]
-    public async Task GetDefinition_ShouldReturnError_WhenOnlyFileProvided()
+    public async Task FindSymbolUsages_ShouldReturnError_WhenOnlyFileProvided()
     {
         // Arrange
         const string file = "/path/to/file.cs";
 
         // Act
-        var result = await GetDefinitionTool.GetDefinition(
+        var result = await FindSymbolUsagesTool.FindSymbolUsages(
             null!,  // Service won't be called due to validation error
             Mock.Of<ILogger<RoslynService>>(),
             file: file);
@@ -72,14 +71,14 @@ internal class GetDefinitionToolTests
     }
 
     [Test]
-    public async Task GetDefinition_ShouldReturnError_WhenFileAndSymbolNameProvided()
+    public async Task FindSymbolUsages_ShouldReturnError_WhenFileAndSymbolNameProvided()
     {
         // Arrange
         const string file = "/path/to/file.cs";
         const string symbolName = "System.String";
 
         // Act
-        var result = await GetDefinitionTool.GetDefinition(
+        var result = await FindSymbolUsagesTool.FindSymbolUsages(
             null!,  // Service won't be called due to validation error
             Mock.Of<ILogger<RoslynService>>(),
             file: file,
@@ -93,14 +92,14 @@ internal class GetDefinitionToolTests
     }
 
     [Test]
-    public async Task GetDefinition_ShouldReturnError_WhenLineAndSymbolNameProvided()
+    public async Task FindSymbolUsages_ShouldReturnError_WhenLineAndSymbolNameProvided()
     {
         // Arrange
         const int line = 10;
         const string symbolName = "System.String";
 
         // Act
-        var result = await GetDefinitionTool.GetDefinition(
+        var result = await FindSymbolUsagesTool.FindSymbolUsages(
             null!,  // Service won't be called due to validation error
             Mock.Of<ILogger<RoslynService>>(),
             line: line,
@@ -114,14 +113,14 @@ internal class GetDefinitionToolTests
     }
 
     [Test]
-    public async Task GetDefinition_ShouldReturnError_WhenColumnAndSymbolNameProvided()
+    public async Task FindSymbolUsages_ShouldReturnError_WhenColumnAndSymbolNameProvided()
     {
         // Arrange
         const int column = 5;
         const string symbolName = "System.String";
 
         // Act
-        var result = await GetDefinitionTool.GetDefinition(
+        var result = await FindSymbolUsagesTool.FindSymbolUsages(
             null!,  // Service won't be called due to validation error
             Mock.Of<ILogger<RoslynService>>(),
             column: column,
@@ -133,11 +132,4 @@ internal class GetDefinitionToolTests
         response.GetProperty("message").GetString().Should()
             .Contain("Provide either (file + line + column) OR symbolName, not both");
     }
-
-    // NOTE: Response structure tests are covered by integration tests.
-    // Unit tests here focus on parameter validation only.
-    // See RoslynServiceIntegrationTests for tests that verify:
-    // - Workspace symbols return file location (isFromWorkspace=true, filePath, line, column)
-    // - DLL symbols return metadata (isFromWorkspace=false, assembly, typeName, symbolKind, signature, package)
-    // - No decompiled source is included in responses
 }

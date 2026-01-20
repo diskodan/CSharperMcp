@@ -245,19 +245,7 @@ internal class RoslynService(
         var docComment = includeDocumentation ? symbol.GetDocumentationCommentXml() : null;
         var modifiers = GetModifiers(symbol);
 
-        string? signature = null;
-        if (symbol is IMethodSymbol method)
-        {
-            signature = method.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-        }
-        else if (symbol is IPropertySymbol property)
-        {
-            signature = property.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-        }
-        else if (symbol is ITypeSymbol type)
-        {
-            signature = type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-        }
+        string? signature = BuildSignature(symbol);
 
         // Determine if symbol is from workspace and get source location
         bool isFromWorkspace = false;
@@ -308,7 +296,82 @@ internal class RoslynService(
         return modifiers;
     }
 
-    public async Task<FindReferencesResult> FindReferencesAsync(
+    private static string? BuildSignature(ISymbol symbol)
+    {
+        // Local variables and parameters don't have meaningful signatures
+        if (symbol.Kind == SymbolKind.Local || symbol.Kind == SymbolKind.Parameter)
+        {
+            return null;
+        }
+
+        // For named types (classes, interfaces, structs, etc.), manually construct the signature
+        // because SymbolDisplayFormat doesn't include accessibility modifiers for types
+        if (symbol is INamedTypeSymbol namedType)
+        {
+            var parts = new List<string>();
+
+            // Add accessibility
+            switch (namedType.DeclaredAccessibility)
+            {
+                case Accessibility.Public: parts.Add("public"); break;
+                case Accessibility.Private: parts.Add("private"); break;
+                case Accessibility.Protected: parts.Add("protected"); break;
+                case Accessibility.Internal: parts.Add("internal"); break;
+                case Accessibility.ProtectedAndInternal: parts.Add("private protected"); break;
+                case Accessibility.ProtectedOrInternal: parts.Add("protected internal"); break;
+            }
+
+            // Add modifiers
+            if (namedType.IsStatic) parts.Add("static");
+            if (namedType.IsAbstract && namedType.TypeKind == TypeKind.Class) parts.Add("abstract");
+            if (namedType.IsSealed && namedType.TypeKind == TypeKind.Class) parts.Add("sealed");
+            if (namedType.IsReadOnly) parts.Add("readonly");
+
+            // Add type keyword
+            parts.Add(namedType.TypeKind switch
+            {
+                TypeKind.Class => "class",
+                TypeKind.Interface => "interface",
+                TypeKind.Struct => "struct",
+                TypeKind.Enum => "enum",
+                TypeKind.Delegate => "delegate",
+                _ => namedType.TypeKind.ToString().ToLowerInvariant()
+            });
+
+            // Add type name with generic parameters
+            var nameFormat = new SymbolDisplayFormat(
+                genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters);
+            parts.Add(namedType.ToDisplayString(nameFormat));
+
+            return string.Join(" ", parts);
+        }
+
+        // Custom format for members (methods, properties, fields, etc.)
+        var format = new SymbolDisplayFormat(
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameOnly,
+            genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters |
+                           SymbolDisplayGenericsOptions.IncludeTypeConstraints |
+                           SymbolDisplayGenericsOptions.IncludeVariance,
+            memberOptions: SymbolDisplayMemberOptions.IncludeModifiers |
+                         SymbolDisplayMemberOptions.IncludeAccessibility |
+                         SymbolDisplayMemberOptions.IncludeType |
+                         SymbolDisplayMemberOptions.IncludeParameters |
+                         SymbolDisplayMemberOptions.IncludeRef,
+            kindOptions: SymbolDisplayKindOptions.IncludeMemberKeyword,
+            parameterOptions: SymbolDisplayParameterOptions.IncludeType |
+                            SymbolDisplayParameterOptions.IncludeName |
+                            SymbolDisplayParameterOptions.IncludeParamsRefOut |
+                            SymbolDisplayParameterOptions.IncludeDefaultValue,
+            propertyStyle: SymbolDisplayPropertyStyle.ShowReadWriteDescriptor,
+            miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
+                                SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
+        );
+
+        // Generate the signature
+        return symbol.ToDisplayString(format);
+    }
+
+    public async Task<FindSymbolUsagesResult> FindSymbolUsagesAsync(
         string? filePath = null,
         int? line = null,
         int? column = null,
@@ -347,20 +410,20 @@ internal class RoslynService(
             if (document == null)
             {
                 logger.LogWarning("Document not found: {FilePath}", filePath);
-                return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
+                return new FindSymbolUsagesResult(0, false, Array.Empty<ReferenceInfo>());
             }
 
             var sourceText = await document.GetTextAsync();
             var position = sourceText.Lines[line.Value - 1].Start + column.Value - 1;
 
             var semanticModel = await document.GetSemanticModelAsync();
-            if (semanticModel == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
+            if (semanticModel == null) return new FindSymbolUsagesResult(0, false, Array.Empty<ReferenceInfo>());
 
             var syntaxRoot = await document.GetSyntaxRootAsync();
-            if (syntaxRoot == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
+            if (syntaxRoot == null) return new FindSymbolUsagesResult(0, false, Array.Empty<ReferenceInfo>());
 
             var node = syntaxRoot.FindToken(position).Parent;
-            if (node == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
+            if (node == null) return new FindSymbolUsagesResult(0, false, Array.Empty<ReferenceInfo>());
 
             var symbolInfo = semanticModel.GetSymbolInfo(node);
             symbol = symbolInfo.Symbol ?? semanticModel.GetDeclaredSymbol(node);
@@ -378,7 +441,7 @@ internal class RoslynService(
             }
         }
 
-        if (symbol == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
+        if (symbol == null) return new FindSymbolUsagesResult(0, false, Array.Empty<ReferenceInfo>());
 
         // Find all references
         var references = await SymbolFinder.FindReferencesAsync(
@@ -426,7 +489,7 @@ internal class RoslynService(
 
         var hasMore = offset + paginatedResults.Count < totalCount;
 
-        return new FindReferencesResult(totalCount, hasMore, paginatedResults);
+        return new FindSymbolUsagesResult(totalCount, hasMore, paginatedResults);
     }
 
     private static string GetContextSnippet(SourceText sourceText, int referenceLine, int contextLines)

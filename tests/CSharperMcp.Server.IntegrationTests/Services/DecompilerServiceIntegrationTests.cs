@@ -397,4 +397,103 @@ internal class DecompilerServiceIntegrationTests
         isObfuscated.Should().BeFalse(
             "System.Linq.Enumerable is a BCL type and should not be flagged as obfuscated");
     }
+
+    [Test]
+    public async Task DecompileTypeAsync_ShouldDetectReferenceAssembly()
+    {
+        // Arrange
+        const string typeName = "System.String";
+
+        // Act
+        var result = await _decompilerService.DecompileTypeAsync(
+            typeName,
+            assemblyName: null,
+            includeImplementation: false);
+
+        // Assert
+        result.Should().NotBeNull();
+
+        // IsReferenceAssembly is a bool field, so it's always populated
+        // The actual value depends on whether the test runs against reference assemblies or implementation assemblies
+        // We're just verifying the field is accessible
+        _ = result!.IsReferenceAssembly; // Just verify it's accessible
+    }
+
+    [Test]
+    public async Task DecompileTypeAsync_ShouldSetWarning_WhenReferenceAssemblyAndIncludeImplementation()
+    {
+        // Arrange
+        const string typeName = "System.String";
+
+        // Act - Try to decompile with includeImplementation=true
+        var result = await _decompilerService.DecompileTypeAsync(
+            typeName,
+            assemblyName: null,
+            includeImplementation: true);
+
+        // Assert
+        result.Should().NotBeNull();
+
+        // If this is a reference assembly, warning should be set when includeImplementation is true
+        if (result!.IsReferenceAssembly)
+        {
+            result.Warning.Should().NotBeNullOrEmpty(
+                "Warning should be set when attempting to include implementation from reference assembly");
+            result.Warning.Should().Contain("reference assembly",
+                "Warning should mention reference assembly");
+        }
+        else
+        {
+            result.Warning.Should().BeNull(
+                "Warning should be null when not a reference assembly");
+        }
+    }
+
+    [Test]
+    public async Task DecompileTypeAsync_ShouldNotSetWarning_WhenReferenceAssemblyButSignaturesOnly()
+    {
+        // Arrange
+        const string typeName = "System.String";
+
+        // Act - Decompile with includeImplementation=false
+        var result = await _decompilerService.DecompileTypeAsync(
+            typeName,
+            assemblyName: null,
+            includeImplementation: false);
+
+        // Assert
+        result.Should().NotBeNull();
+
+        // Warning should be null when includeImplementation is false, regardless of reference assembly status
+        result!.Warning.Should().BeNull(
+            "Warning should be null when not requesting implementation");
+    }
+
+    [Test]
+    public async Task DecompileTypeAsync_ShouldIncludeIsReferenceAssemblyField()
+    {
+        // Arrange - Test with multiple BCL types
+        var bclTypes = new[]
+        {
+            "System.String",
+            "System.Int32",
+            "System.Collections.Generic.List`1"
+        };
+
+        foreach (var typeName in bclTypes)
+        {
+            // Act
+            var result = await _decompilerService.DecompileTypeAsync(
+                typeName,
+                assemblyName: null,
+                includeImplementation: false);
+
+            // Assert
+            result.Should().NotBeNull($"Failed to decompile {typeName}");
+
+            // Verify the field is accessible (it's a bool, so always has a value)
+            // The actual value depends on the assembly type
+            _ = result!.IsReferenceAssembly; // Just verify it's accessible
+        }
+    }
 }

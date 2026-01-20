@@ -79,7 +79,9 @@ internal static class GetDecompiledSourceTool
                 includesImplementation = result.IncludesImplementation,
                 lineCount = result.LineCount,
                 isLikelyObfuscated = result.IsLikelyObfuscated,
-                obfuscationWarning = result.ObfuscationWarning
+                obfuscationWarning = result.ObfuscationWarning,
+                isReferenceAssembly = result.IsReferenceAssembly,
+                warning = result.Warning
             });
         }
         catch (Exception ex)

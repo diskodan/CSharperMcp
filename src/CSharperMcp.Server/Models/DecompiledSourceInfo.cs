@@ -30,5 +30,11 @@ internal record DecompiledSourceInfo(
     bool IsLikelyObfuscated,
 
     /// <summary>Warning message if obfuscation is detected, null otherwise</summary>
-    string? ObfuscationWarning
+    string? ObfuscationWarning,
+
+    /// <summary>Whether this is a reference assembly (contains only type/member signatures, no implementation)</summary>
+    bool IsReferenceAssembly,
+
+    /// <summary>Warning message if reference assembly detected with includeImplementation=true, null otherwise</summary>
+    string? Warning
 );

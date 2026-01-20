@@ -4,6 +4,7 @@ using ICSharpCode.Decompiler.TypeSystem;
 using CSharperMcp.Server.Models;
 using CSharperMcp.Server.Workspace;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
 using System.Text.RegularExpressions;
 
 namespace CSharperMcp.Server.Services;
@@ -107,6 +108,14 @@ internal class DecompilerService(WorkspaceManager workspaceManager, ILogger<Deco
                 ? "This assembly appears to be obfuscated. Decompiled source may contain unreadable identifiers and may not accurately represent the original code structure."
                 : null;
 
+            // Detect reference assembly
+            var isReferenceAssembly = IsReferenceAssembly(assemblyPath);
+            string? warning = null;
+            if (isReferenceAssembly && includeImplementation)
+            {
+                warning = "This is a reference assembly, method bodies not available";
+            }
+
             return new DecompiledSourceInfo(
                 TypeName: simpleTypeName,
                 Namespace: ns,
@@ -116,7 +125,9 @@ internal class DecompilerService(WorkspaceManager workspaceManager, ILogger<Deco
                 IncludesImplementation: includeImplementation,
                 LineCount: lineCount,
                 IsLikelyObfuscated: isObfuscated,
-                ObfuscationWarning: obfuscationWarning
+                ObfuscationWarning: obfuscationWarning,
+                IsReferenceAssembly: isReferenceAssembly,
+                Warning: warning
             );
         }
         catch (Exception ex)
@@ -365,6 +376,40 @@ internal class DecompilerService(WorkspaceManager workspaceManager, ILogger<Deco
 
         // Threshold: Score >= 5 suggests likely obfuscation
         return obfuscationScore >= 5;
+    }
+
+    /// <summary>
+    /// Detects whether an assembly is a reference assembly (contains only type/member signatures, no implementation).
+    /// Uses both path-based heuristics (fast) and attribute-based detection (authoritative).
+    /// </summary>
+    /// <param name="assemblyPath">The file path to the assembly</param>
+    /// <returns>True if the assembly is a reference assembly, false otherwise</returns>
+    private static bool IsReferenceAssembly(string assemblyPath)
+    {
+        // Method 1: Path-based heuristic (fast)
+        // Reference assemblies are typically in "/packs/" directories or have ".Ref/" in their path
+        if (assemblyPath.Contains("/packs/") ||
+            assemblyPath.Contains(@"\packs\") ||
+            assemblyPath.Contains(".Ref/") ||
+            assemblyPath.Contains(@".Ref\"))
+        {
+            return true;
+        }
+
+        // Method 2: Attribute-based detection (authoritative)
+        // Check for ReferenceAssemblyAttribute on the assembly
+        try
+        {
+            var assembly = System.Reflection.Assembly.LoadFrom(assemblyPath);
+            var refAssemblyAttr = assembly.GetCustomAttribute(
+                typeof(System.Runtime.CompilerServices.ReferenceAssemblyAttribute));
+            return refAssemblyAttr != null;
+        }
+        catch
+        {
+            // If we can't load the assembly, fall back to path-based result
+            return false;
+        }
     }
 
 }

@@ -266,15 +266,15 @@ internal class RoslynServiceIntegrationTests
     }
 
     [Test]
-    public async Task FindReferencesAsync_ByLocation_FindsAllUsages()
+    public async Task FindSymbolUsagesAsync_ByLocation_FindsAllUsages()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Find references to Calculator.Add method (defined at Calculator.cs line 5)
-        var result = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
-        var references = result.References.ToList();
+        var result = await _sut.FindSymbolUsagesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var references = result.Usages.ToList();
 
         // Assert - Should find the definition + 3 usages in Program.cs
         references.Should().NotBeEmpty();
@@ -286,15 +286,15 @@ internal class RoslynServiceIntegrationTests
     }
 
     [Test]
-    public async Task FindReferencesAsync_ByName_FindsTypeUsages()
+    public async Task FindSymbolUsagesAsync_ByName_FindsTypeUsages()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Find references to Calculator type
-        var result = await _sut.FindReferencesAsync(symbolName: "SimpleProject.Calculator");
-        var references = result.References;
+        var result = await _sut.FindSymbolUsagesAsync(symbolName: "SimpleProject.Calculator");
+        var references = result.Usages;
 
         // Assert - Should find instantiation in Program.cs
         references.Should().NotBeEmpty();
@@ -304,30 +304,30 @@ internal class RoslynServiceIntegrationTests
     }
 
     [Test]
-    public async Task FindReferencesAsync_WithInvalidSymbol_ReturnsEmpty()
+    public async Task FindSymbolUsagesAsync_WithInvalidSymbol_ReturnsEmpty()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var result = await _sut.FindReferencesAsync(filePath: "NonExistent.cs", line: 1, column: 1);
-        var references = result.References;
+        var result = await _sut.FindSymbolUsagesAsync(filePath: "NonExistent.cs", line: 1, column: 1);
+        var references = result.Usages;
 
         // Assert
         references.Should().BeEmpty();
     }
 
     [Test]
-    public async Task FindReferencesAsync_ReturnsLocationDetails()
+    public async Task FindSymbolUsagesAsync_ReturnsLocationDetails()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var result = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
-        var references = result.References.ToList();
+        var result = await _sut.FindSymbolUsagesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var references = result.Usages.ToList();
 
         // Assert
         references.Should().NotBeEmpty();
@@ -744,18 +744,18 @@ internal class RoslynServiceIntegrationTests
         totalCount.Should().BeGreaterOrEqualTo(diagnosticsList.Count);
     }
     [Test]
-    public async Task FindReferencesAsync_WithPagination_ReturnsCorrectSubset()
+    public async Task FindSymbolUsagesAsync_WithPagination_ReturnsCorrectSubset()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Get all references first
-        var allResult = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var allResult = await _sut.FindSymbolUsagesAsync(filePath: "Calculator.cs", line: 5, column: 16);
         var totalCount = allResult.TotalCount;
 
         // Act - Get first 2 references
-        var firstPageResult = await _sut.FindReferencesAsync(
+        var firstPageResult = await _sut.FindSymbolUsagesAsync(
             filePath: "Calculator.cs",
             line: 5,
             column: 16,
@@ -764,25 +764,25 @@ internal class RoslynServiceIntegrationTests
 
         // Assert
         firstPageResult.TotalCount.Should().Be(totalCount);
-        firstPageResult.References.Should().HaveCountLessOrEqualTo(2);
+        firstPageResult.Usages.Should().HaveCountLessOrEqualTo(2);
         firstPageResult.HasMore.Should().Be(totalCount > 2);
 
         if (totalCount > 2)
         {
-            firstPageResult.References.Count.Should().Be(2);
+            firstPageResult.Usages.Count.Should().Be(2);
         }
     }
 
     [Test]
-    public async Task FindReferencesAsync_WithOffset_SkipsCorrectNumberOfResults()
+    public async Task FindSymbolUsagesAsync_WithOffset_SkipsCorrectNumberOfResults()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Get all references
-        var allResult = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
-        var allReferences = allResult.References.ToList();
+        var allResult = await _sut.FindSymbolUsagesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var allReferences = allResult.Usages.ToList();
         var totalCount = allResult.TotalCount;
 
         if (totalCount < 3)
@@ -792,7 +792,7 @@ internal class RoslynServiceIntegrationTests
         }
 
         // Act - Skip first 2 references
-        var offsetResult = await _sut.FindReferencesAsync(
+        var offsetResult = await _sut.FindSymbolUsagesAsync(
             filePath: "Calculator.cs",
             line: 5,
             column: 16,
@@ -801,34 +801,34 @@ internal class RoslynServiceIntegrationTests
 
         // Assert
         offsetResult.TotalCount.Should().Be(totalCount);
-        offsetResult.References.Should().HaveCount(totalCount - 2);
+        offsetResult.Usages.Should().HaveCount(totalCount - 2);
         
         // First reference in offset result should match third reference from all results
-        if (offsetResult.References.Count > 0)
+        if (offsetResult.Usages.Count > 0)
         {
-            offsetResult.References[0].FilePath.Should().Be(allReferences[2].FilePath);
-            offsetResult.References[0].Line.Should().Be(allReferences[2].Line);
-            offsetResult.References[0].Column.Should().Be(allReferences[2].Column);
+            offsetResult.Usages[0].FilePath.Should().Be(allReferences[2].FilePath);
+            offsetResult.Usages[0].Line.Should().Be(allReferences[2].Line);
+            offsetResult.Usages[0].Column.Should().Be(allReferences[2].Column);
         }
     }
 
     [Test]
-    public async Task FindReferencesAsync_WithContextLinesOne_ReturnsSingleLine()
+    public async Task FindSymbolUsagesAsync_WithContextLinesOne_ReturnsSingleLine()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var result = await _sut.FindReferencesAsync(
+        var result = await _sut.FindSymbolUsagesAsync(
             filePath: "Calculator.cs",
             line: 5,
             column: 16,
             contextLines: 1);
 
         // Assert
-        result.References.Should().NotBeEmpty();
-        foreach (var reference in result.References)
+        result.Usages.Should().NotBeEmpty();
+        foreach (var reference in result.Usages)
         {
             // Context should be a single line (no newlines)
             reference.ContextSnippet.Should().NotContain(Environment.NewLine);
@@ -836,24 +836,24 @@ internal class RoslynServiceIntegrationTests
     }
 
     [Test]
-    public async Task FindReferencesAsync_WithContextLinesThree_ReturnsThreeLines()
+    public async Task FindSymbolUsagesAsync_WithContextLinesThree_ReturnsThreeLines()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var result = await _sut.FindReferencesAsync(
+        var result = await _sut.FindSymbolUsagesAsync(
             filePath: "Calculator.cs",
             line: 5,
             column: 16,
             contextLines: 3);
 
         // Assert
-        result.References.Should().NotBeEmpty();
+        result.Usages.Should().NotBeEmpty();
         
         // Find a reference that's not on the first or last line of the file
-        var middleReference = result.References.FirstOrDefault(r => 
+        var middleReference = result.Usages.FirstOrDefault(r => 
             r.Line > 1 && 
             r.FilePath.EndsWith("Program.cs"));
 
@@ -867,24 +867,24 @@ internal class RoslynServiceIntegrationTests
     }
 
     [Test]
-    public async Task FindReferencesAsync_WithContextLinesFive_ReturnsFiveLines()
+    public async Task FindSymbolUsagesAsync_WithContextLinesFive_ReturnsFiveLines()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var result = await _sut.FindReferencesAsync(
+        var result = await _sut.FindSymbolUsagesAsync(
             filePath: "Calculator.cs",
             line: 5,
             column: 16,
             contextLines: 5);
 
         // Assert
-        result.References.Should().NotBeEmpty();
+        result.Usages.Should().NotBeEmpty();
         
         // Find a reference in the middle of a file
-        var middleReference = result.References.FirstOrDefault(r => 
+        var middleReference = result.Usages.FirstOrDefault(r => 
             r.Line > 2 && 
             r.FilePath.EndsWith("Program.cs"));
 
@@ -898,14 +898,14 @@ internal class RoslynServiceIntegrationTests
     }
 
     [Test]
-    public async Task FindReferencesAsync_PaginationMetadata_IsAccurate()
+    public async Task FindSymbolUsagesAsync_PaginationMetadata_IsAccurate()
     {
         // Arrange
         var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Get all references
-        var allResult = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var allResult = await _sut.FindSymbolUsagesAsync(filePath: "Calculator.cs", line: 5, column: 16);
         var totalCount = allResult.TotalCount;
 
         if (totalCount < 2)
@@ -915,7 +915,7 @@ internal class RoslynServiceIntegrationTests
         }
 
         // Act - Get first page with maxResults = 1
-        var firstPage = await _sut.FindReferencesAsync(
+        var firstPage = await _sut.FindSymbolUsagesAsync(
             filePath: "Calculator.cs",
             line: 5,
             column: 16,
@@ -924,11 +924,11 @@ internal class RoslynServiceIntegrationTests
 
         // Assert first page
         firstPage.TotalCount.Should().Be(totalCount);
-        firstPage.References.Should().HaveCount(1);
+        firstPage.Usages.Should().HaveCount(1);
         firstPage.HasMore.Should().BeTrue();
 
         // Act - Get last page
-        var lastPage = await _sut.FindReferencesAsync(
+        var lastPage = await _sut.FindSymbolUsagesAsync(
             filePath: "Calculator.cs",
             line: 5,
             column: 16,
@@ -937,7 +937,7 @@ internal class RoslynServiceIntegrationTests
 
         // Assert last page
         lastPage.TotalCount.Should().Be(totalCount);
-        lastPage.References.Should().HaveCount(1);
+        lastPage.Usages.Should().HaveCount(1);
         lastPage.HasMore.Should().BeFalse();
     }
 }

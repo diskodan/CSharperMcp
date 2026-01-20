@@ -238,16 +238,16 @@ await builder.Build().RunAsync();
    - Use `SemanticModel.GetSymbolInfo()` or `Compilation.GetTypeByMetadataName()`
    - Return: kind, name, containingType, namespace, assembly, package, docComment, modifiers, signature
 
-4. **`find_references`** - All usages of a symbol
+4. **`find_symbol_usages`** - All usages of a symbol
    - Input: `{ "file", "line", "column" }` OR `{ "symbolName" }`
    - Use `SymbolFinder.FindReferencesAsync()`
    - Return: array of `{ file, line, column, contextSnippet, referenceKind }`
 
-5. **`get_definition`** - Go to definition (source or decompiled)
+5. **`get_definition_location`** - Navigate to definition location
    - Input: `{ "file", "line", "column" }` OR `{ "symbolName" }`
    - If in workspace: return file location
-   - If in DLL: use ICSharpCode.Decompiler to get source
-   - Return: `{ file, line, column }` OR `{ decompiledSource, assembly, package }`
+   - If in DLL: return metadata (assembly, type name, kind, signature)
+   - Return: `{ file, line, column }` OR `{ assembly, typeName, symbolKind, signature, package }`
 
 6. **`get_type_members`** - Full type definition with all members
    - Input: `{ "typeName": "System.String", "includeInherited?": false }`
