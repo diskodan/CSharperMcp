@@ -3,6 +3,22 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+
+    <!-- NuGet Package Configuration -->
+    <PackageId>CSharperMcp</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>dan</Authors>
+    <Description>MCP server for LLMs to understand C# code without brute-force grepping &amp; hallucinations. Provides IDE-like semantic understanding using Roslyn and ILSpy.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/diskodan/CSharperMcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/diskodan/CSharperMcp.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>mcp;model-context-protocol;roslyn;csharp;lsp;language-server;decompiler;llm;ai</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- .NET Tool Configuration -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>csharper-mcp</ToolCommandName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +36,11 @@
     <PackageReference Include="System.Composition.Hosting" />
     <PackageReference Include="System.Composition.Runtime" />
     <PackageReference Include="TaskTupleAwaiter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include README.md in NuGet package -->
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
