@@ -534,7 +534,7 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Get signatures only
-        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator", includeInherited: false, includeImplementation: false);
+        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator", includeImplementation: false);
 
         // Assert - Should return signatures without method bodies
         typeMembers.Should().NotBeNull();
@@ -567,7 +567,7 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Get full source
-        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator", includeInherited: false, includeImplementation: true);
+        var typeMembers = await _sut.GetTypeMembersAsync("SimpleProject.Calculator", includeImplementation: true);
 
         // Assert - Should return full source with method bodies
         typeMembers.Should().NotBeNull();
@@ -593,7 +593,7 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Get System.Console signatures only
-        var typeMembers = await _sut.GetTypeMembersAsync("System.Console", includeInherited: false, includeImplementation: false);
+        var typeMembers = await _sut.GetTypeMembersAsync("System.Console", includeImplementation: false);
 
         // Assert - Should return decompiled signatures without method bodies
         typeMembers.Should().NotBeNull();
@@ -607,7 +607,7 @@ internal class RoslynServiceIntegrationTests
         typeMembers.SourceCode.Should().Contain("WriteLine");
 
         // Verify the parameter is being passed correctly
-        var fullTypeMembers = await _sut.GetTypeMembersAsync("System.Console", includeInherited: false, includeImplementation: true);
+        var fullTypeMembers = await _sut.GetTypeMembersAsync("System.Console", includeImplementation: true);
         fullTypeMembers.Should().NotBeNull();
         fullTypeMembers!.IncludesImplementation.Should().BeTrue();
 
@@ -624,7 +624,7 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Get System.Console full source
-        var typeMembers = await _sut.GetTypeMembersAsync("System.Console", includeInherited: false, includeImplementation: true);
+        var typeMembers = await _sut.GetTypeMembersAsync("System.Console", includeImplementation: true);
 
         // Assert - Should return decompiled source with method bodies
         typeMembers.Should().NotBeNull();

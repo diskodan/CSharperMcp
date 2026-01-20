@@ -10,17 +10,16 @@ namespace CSharperMcp.Server.Tools;
 internal static class GetTypeMembersTool
 {
     [McpServerTool]
-    [Description("Get the full definition of a type with all its members. Returns complete source code for workspace types or decompiled source for DLL types (BCL, NuGet packages). Use includeImplementation=false to get signatures only (more token-efficient).")]
+    [Description("Get the full definition of a type with all its members. Universal tool that works for ANY type regardless of source - workspace code, BCL, or NuGet packages. Returns complete source code for workspace types or decompiled source for DLL types. Defaults to full implementation (includeImplementation=true). For token-efficient DLL exploration, use get_decompiled_source instead (defaults to signatures-only).")]
     public static async Task<string> GetTypeMembers(
         RoslynService roslynService,
         ILogger<RoslynService> logger,
         [Description("Fully qualified type name (e.g. 'System.String', 'SimpleProject.Calculator')")] string typeName,
-        [Description("Include inherited members (not yet implemented, reserved for future use)")] bool includeInherited = false,
         [Description("Include method implementations (default: true). Set to false for signatures only (more token-efficient for large types)")] bool includeImplementation = true)
     {
         try
         {
-            var typeMembers = await roslynService.GetTypeMembersAsync(typeName, includeInherited, includeImplementation);
+            var typeMembers = await roslynService.GetTypeMembersAsync(typeName, includeImplementation);
 
             if (typeMembers == null)
             {

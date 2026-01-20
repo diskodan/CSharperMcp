@@ -177,8 +177,7 @@ After researching the current landscape:
     "type": "object",
     "properties": {
       "typeName": { "type": "string", "description": "Fully qualified type name, e.g., 'System.String' or 'MyApp.Services.FooDto'" },
-      "includeInherited": { "type": "boolean", "default": false },
-      "includePrivate": { "type": "boolean", "default": false }
+      "includeImplementation": { "type": "boolean", "default": true, "description": "Include method implementations (default: true). Set to false for signatures only (more token-efficient)" }
     }
   }
 }

@@ -10,7 +10,7 @@ namespace CSharperMcp.Server.Tools;
 internal static class SymbolInfoTool
 {
     [McpServerTool]
-    [Description("Get symbol information at a specific location or by fully qualified name. Like LSP hover - works for variables, methods, types, etc. Returns type, namespace, assembly, and signature. Set includeDocumentation=true to get XML doc comments (can be verbose). For workspace symbols, use SourceFile/SourceLine to navigate to definition. Use either (file + line + column) OR symbolName, not both.")]
+    [Description("Get symbol information at a specific location or by fully qualified name. Like LSP hover - works for variables, methods, types, etc. Returns type, namespace, assembly, package, and signature. Set includeDocumentation=true to get XML doc comments (can be verbose). IMPORTANT: 'assembly' field is always present (project name for workspace symbols, DLL name for BCL/NuGet). 'package' field is only populated for NuGet packages (null for workspace and BCL). For workspace symbols, use SourceFile/SourceLine to navigate to definition. Use either (file + line + column) OR symbolName, not both.")]
     public static async Task<string> GetSymbolInfo(
         RoslynService roslynService,
         ILogger<RoslynService> logger,

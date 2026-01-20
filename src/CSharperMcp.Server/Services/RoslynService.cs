@@ -652,7 +652,6 @@ internal class RoslynService(
 
     public async Task<TypeMembersInfo?> GetTypeMembersAsync(
         string typeName,
-        bool includeInherited = false,
         bool includeImplementation = true)
     {
         if (workspaceManager.CurrentSolution == null)

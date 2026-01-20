@@ -699,7 +699,6 @@ foreach (var type in allTypes)
 ```json
 {
   "typeName": "Fully qualified type name (e.g., 'System.String')",
-  "includeInherited": "Include inherited members (reserved, not yet implemented)",
   "includeImplementation": "Include method bodies (default true)"
 }
 ```
@@ -739,15 +738,13 @@ foreach (var type in allTypes)
    - Different defaults: this tool defaults to full implementation
    - **Fix**: Clarify in description when to use each
 
-2. **`includeInherited` Parameter**
-   - Present but not implemented
-   - Confusing for users
-   - **Fix**: Remove parameter OR implement it
+2. **`includeInherited` Parameter** ✅ **FIXED**
+   - Previously present but not implemented
+   - **Resolution**: Parameter has been removed to eliminate confusion
 
 **Recommendations:**
 
 1. 🟡 **MEDIUM**: Clarify difference from `get_decompiled_source` in description
-2. 🟡 **MEDIUM**: Either implement `includeInherited` or remove the parameter
 
 **Priority:** 🟡 **MEDIUM** - Works well but needs clarity improvements
 
@@ -923,9 +920,9 @@ foreach (var type in allTypes)
    - **Solution**: Research and plan `get_implementations` tool for Phase 4
    - **Roslyn APIs**: Manual scanning required (no built-in API)
 
-6. **`includeInherited` Parameter**
-   - **Issue**: Present in `get_type_members` but not implemented
-   - **Solution**: Either implement OR remove the parameter
+6. **`includeInherited` Parameter** ✅ **FIXED**
+   - **Issue**: Was present in `get_type_members` but not implemented
+   - **Solution**: Parameter has been removed
    - **Impact**: Reduces API surface confusion
 
 ### 🟢 LOW PRIORITY (Nice to Have)
@@ -984,7 +981,6 @@ foreach (var type in allTypes)
 ### Phase 3: Future Enhancements (Backlog)
 
 🟢 Research and implement `get_implementations` tool
-🟢 Implement `includeInherited` parameter in `get_type_members`
 🟢 Add workspace discovery feedback to `initialize_workspace`
 🟢 Cache decompiled sources for performance
 

@@ -648,16 +648,16 @@ The server exposes 8 tools:
 - **SAME MAJOR ISSUES AS `get_definition`**:
   - Decompiled source can be enormous (Dictionary is ~2000+ lines)
   - Obfuscated DLLs will be unreadable
-- `includeInherited` parameter doesn't work yet - confusing
-- No way to get just signatures without bodies
+- `includeInherited` parameter doesn't work yet - confusing ✅ **FIXED** (removed in later version)
+- No way to get just signatures without bodies ✅ **FIXED** (added `includeImplementation` parameter)
 - For generic types, unclear how to specify type arguments in `typeName`
 
 **Recommendations:**
-- **CRITICAL**: Same as `get_definition` - add parameter to control detail level
-- Remove `includeInherited` parameter until implemented (or implement it)
+- **CRITICAL**: Same as `get_definition` - add parameter to control detail level ✅ **FIXED**
+- Remove `includeInherited` parameter until implemented (or implement it) ✅ **FIXED** (removed)
 - Add examples in description showing how to query generic types
-- Add `memberCount` field to warn about large types
-- Consider alternative "list members only" mode that returns just signatures
+- Add `memberCount` field to warn about large types ✅ **FIXED** (added `lineCount` field)
+- Consider alternative "list members only" mode that returns just signatures ✅ **FIXED** (implemented)
 
 ---
 

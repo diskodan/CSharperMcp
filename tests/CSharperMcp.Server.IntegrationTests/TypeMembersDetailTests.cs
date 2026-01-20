@@ -63,7 +63,6 @@ internal class TypeMembersDetailTests
         // Act - Get signatures only
         var result = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: false);
 
         // Assert
@@ -97,7 +96,6 @@ internal class TypeMembersDetailTests
         // Act - Get full implementation
         var result = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -126,12 +124,10 @@ internal class TypeMembersDetailTests
         // Act
         var signaturesOnly = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: false);
 
         var fullImpl = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -167,7 +163,6 @@ internal class TypeMembersDetailTests
         // Act - Get System.Console signatures only
         var result = await _sut.GetTypeMembersAsync(
             "System.Console",
-            includeInherited: false,
             includeImplementation: false);
 
         // Assert
@@ -193,7 +188,6 @@ internal class TypeMembersDetailTests
         // Act - Get System.Console full implementation
         var result = await _sut.GetTypeMembersAsync(
             "System.Console",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -219,12 +213,10 @@ internal class TypeMembersDetailTests
         // Act
         var signaturesOnly = await _sut.GetTypeMembersAsync(
             "System.Console",
-            includeInherited: false,
             includeImplementation: false);
 
         var fullImpl = await _sut.GetTypeMembersAsync(
             "System.Console",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -252,12 +244,10 @@ internal class TypeMembersDetailTests
         // Act
         var signaturesOnly = await _sut.GetTypeMembersAsync(
             "System.String",
-            includeInherited: false,
             includeImplementation: false);
 
         var fullImpl = await _sut.GetTypeMembersAsync(
             "System.String",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -290,7 +280,6 @@ internal class TypeMembersDetailTests
         // Act
         var result = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -310,12 +299,10 @@ internal class TypeMembersDetailTests
         // Act
         var signaturesOnly = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: false);
 
         var fullImpl = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -341,7 +328,6 @@ internal class TypeMembersDetailTests
         // Act
         var result = await _sut.GetTypeMembersAsync(
             "Newtonsoft.Json.Linq.JObject",
-            includeInherited: false,
             includeImplementation: false);
 
         // Assert
@@ -366,7 +352,6 @@ internal class TypeMembersDetailTests
         // Act
         var result = await _sut.GetTypeMembersAsync(
             "Newtonsoft.Json.Linq.JObject",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -390,12 +375,10 @@ internal class TypeMembersDetailTests
         // Act
         var signaturesOnly = await _sut.GetTypeMembersAsync(
             "Newtonsoft.Json.Linq.JObject",
-            includeInherited: false,
             includeImplementation: false);
 
         var fullImpl = await _sut.GetTypeMembersAsync(
             "Newtonsoft.Json.Linq.JObject",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert
@@ -424,7 +407,6 @@ internal class TypeMembersDetailTests
         // Act
         var result = await _sut.GetTypeMembersAsync(
             "SimpleProject.Calculator",
-            includeInherited: false,
             includeImplementation: true);
 
         // Assert - Verify all fields are populated
@@ -450,7 +432,6 @@ internal class TypeMembersDetailTests
         // Act
         var result = await _sut.GetTypeMembersAsync(
             "System.Console",
-            includeInherited: false,
             includeImplementation: false);
 
         // Assert - Verify all fields are populated
@@ -480,7 +461,6 @@ internal class TypeMembersDetailTests
         // Act
         var result = await _sut.GetTypeMembersAsync(
             "NonExistent.Type",
-            includeInherited: false,
             includeImplementation: false);
 
         // Assert
@@ -500,8 +480,7 @@ internal class TypeMembersDetailTests
 
         // Act - Call with default includeImplementation (should be true)
         var result = await _sut.GetTypeMembersAsync(
-            "SimpleProject.Calculator",
-            includeInherited: false);
+            "SimpleProject.Calculator");
 
         // Assert
         result.Should().NotBeNull();

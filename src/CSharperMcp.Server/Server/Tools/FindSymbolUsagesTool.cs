@@ -10,7 +10,7 @@ namespace CSharperMcp.Server.Tools;
 internal static class FindSymbolUsagesTool
 {
     [McpServerTool]
-    [Description("Find all usages of a symbol across the workspace (not implementations). Returns file locations with line numbers and code snippets. Supports pagination for large result sets. Use either (file + line + column) OR symbolName, not both.")]
+    [Description("Find all usages/references of a symbol across the workspace. IMPORTANT: This finds where a symbol is USED, not where it's IMPLEMENTED. For example, calling this on an interface finds where the interface is referenced, but does NOT find classes that implement it. For derived classes/interface implementations, that functionality is not yet available. Returns file locations with line numbers and code snippets. Supports pagination for large result sets. Use either (file + line + column) OR symbolName, not both.")]
     public static async Task<string> FindSymbolUsages(
         RoslynService roslynService,
         ILogger<RoslynService> logger,

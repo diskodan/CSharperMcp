@@ -250,7 +250,7 @@ await builder.Build().RunAsync();
    - Return: `{ file, line, column }` OR `{ assembly, typeName, symbolKind, signature, package }`
 
 6. **`get_type_members`** - Full type definition with all members
-   - Input: `{ "typeName": "System.String", "includeInherited?": false }`
+   - Input: `{ "typeName": "System.String", "includeImplementation?": true }`
    - For workspace types: use Roslyn
    - For DLL types: use Decompiler
    - Return: full decompiled source or structured member list
@@ -337,6 +337,658 @@ var decompiler = new CSharpDecompiler(assemblyPath, new DecompilerSettings
 var typeName = new FullTypeName("Namespace.TypeName");
 var decompiledSource = decompiler.DecompileTypeAsString(typeName);
 ```
+
+---
+
+## Usage Examples
+
+This section demonstrates real-world workflows using the MCP server tools. These examples show how tools work together to accomplish common development tasks.
+
+### Example 1: Basic Workflow - Initialize, Get Diagnostics, Fix Errors
+
+**Scenario**: You've cloned a new C# project and want to understand what's broken.
+
+```json
+// Step 1: Initialize the workspace
+{
+  "tool": "initialize_workspace",
+  "arguments": {
+    "path": "/home/user/projects/MyApp"
+  }
+}
+
+// Response:
+{
+  "success": true,
+  "projectCount": 3,
+  "solutionPath": "/home/user/projects/MyApp/MyApp.sln",
+  "projects": [
+    "MyApp.Core",
+    "MyApp.Web",
+    "MyApp.Tests"
+  ]
+}
+
+// Step 2: Get all diagnostics to see what's broken
+{
+  "tool": "get_diagnostics",
+  "arguments": {}
+}
+
+// Response:
+{
+  "diagnostics": [
+    {
+      "id": "CS0103",
+      "severity": "Error",
+      "message": "The name 'logger' does not exist in the current context",
+      "file": "/home/user/projects/MyApp/MyApp.Core/UserService.cs",
+      "line": 42,
+      "column": 13,
+      "endLine": 42,
+      "endColumn": 19,
+      "hasFix": true
+    },
+    {
+      "id": "CS0246",
+      "severity": "Error",
+      "message": "The type or namespace name 'JsonSerializer' could not be found",
+      "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/ApiController.cs",
+      "line": 15,
+      "column": 21,
+      "endLine": 15,
+      "endColumn": 35,
+      "hasFix": false
+    }
+  ]
+}
+
+// Step 3: Get diagnostics for a specific file to focus on one issue
+{
+  "tool": "get_diagnostics",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Core/UserService.cs"
+  }
+}
+
+// Response shows only diagnostics in UserService.cs
+// Step 4: Fix the issues, then re-run diagnostics to verify
+```
+
+**Key Takeaway**: Start broad (whole workspace), then narrow down (specific files) to systematically fix issues.
+
+---
+
+### Example 2: Symbol Exploration - Get Info, Navigate, Find Usages
+
+**Scenario**: You found a class `OrderProcessor` and want to understand how it's used across the codebase.
+
+```json
+// Step 1: Get symbol info at cursor position
+{
+  "tool": "get_symbol_info",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+    "line": 10,
+    "column": 18
+  }
+}
+
+// Response:
+{
+  "kind": "Class",
+  "name": "OrderProcessor",
+  "namespace": "MyApp.Core.Processing",
+  "assembly": "MyApp.Core",
+  "containingType": null,
+  "modifiers": ["public"],
+  "signature": "public class OrderProcessor",
+  "docComment": "Handles order processing and validation logic.",
+  "locations": [
+    {
+      "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+      "line": 10,
+      "column": 18
+    }
+  ]
+}
+
+// Step 2: Find all usages of this class
+{
+  "tool": "find_symbol_usages",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+    "line": 10,
+    "column": 18
+  }
+}
+
+// Response:
+{
+  "references": [
+    {
+      "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/OrderController.cs",
+      "line": 23,
+      "column": 20,
+      "contextSnippet": "    private readonly OrderProcessor _processor;",
+      "referenceKind": "Declaration"
+    },
+    {
+      "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/OrderController.cs",
+      "line": 30,
+      "column": 42,
+      "contextSnippet": "        var result = await _processor.ProcessOrder(order);",
+      "referenceKind": "Read"
+    },
+    {
+      "file": "/home/user/projects/MyApp/MyApp.Tests/OrderProcessorTests.cs",
+      "line": 15,
+      "column": 20,
+      "contextSnippet": "        var processor = new OrderProcessor(mockRepo.Object);",
+      "referenceKind": "ObjectCreation"
+    }
+  ]
+}
+
+// Step 3: Navigate to a specific usage
+{
+  "tool": "get_definition_location",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/OrderController.cs",
+    "line": 30,
+    "column": 52
+  }
+}
+
+// Response:
+{
+  "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+  "line": 45,
+  "column": 29,
+  "symbolKind": "Method",
+  "signature": "public async Task<OrderResult> ProcessOrder(Order order)"
+}
+```
+
+**Key Takeaway**: Symbol tools work together - get info to understand what something is, find usages to see where it's used, get definition to jump to implementation.
+
+---
+
+### Example 3: DLL Introspection - Understand NuGet Package Code
+
+**Scenario**: You're using `Newtonsoft.Json` and want to understand how `JObject.Parse()` works.
+
+```json
+// Step 1: Get symbol info for JObject.Parse (cursor on method call)
+{
+  "tool": "get_symbol_info",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Services/JsonService.cs",
+    "line": 18,
+    "column": 28
+  }
+}
+
+// Response:
+{
+  "kind": "Method",
+  "name": "Parse",
+  "namespace": "Newtonsoft.Json.Linq",
+  "assembly": "Newtonsoft.Json, Version=13.0.0.0",
+  "containingType": "JObject",
+  "modifiers": ["public", "static"],
+  "signature": "public static JObject Parse(string json)",
+  "docComment": "Load a JObject from a string that contains JSON.",
+  "package": "Newtonsoft.Json 13.0.3",
+  "isFromMetadata": true
+}
+
+// Step 2: Get definition location (will return metadata info, not file)
+{
+  "tool": "get_definition_location",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Services/JsonService.cs",
+    "line": 18,
+    "column": 28
+  }
+}
+
+// Response:
+{
+  "assembly": "Newtonsoft.Json, Version=13.0.0.0",
+  "typeName": "Newtonsoft.Json.Linq.JObject",
+  "symbolKind": "Method",
+  "signature": "public static JObject Parse(string json)",
+  "package": "Newtonsoft.Json 13.0.3"
+}
+
+// Step 3: Get the entire JObject type with decompiled source
+{
+  "tool": "get_type_members",
+  "arguments": {
+    "typeName": "Newtonsoft.Json.Linq.JObject",
+    "includeImplementation": true
+  }
+}
+
+// Response:
+{
+  "typeName": "Newtonsoft.Json.Linq.JObject",
+  "namespace": "Newtonsoft.Json.Linq",
+  "assembly": "Newtonsoft.Json",
+  "kind": "Class",
+  "source": "// Decompiled with ICSharpCode.Decompiler\nnamespace Newtonsoft.Json.Linq\n{\n    public class JObject : JContainer, IDictionary<string, JToken>, ...\n    {\n        public static JObject Parse(string json)\n        {\n            using JsonReader reader = new JsonTextReader(new StringReader(json));\n            JObject result = Load(reader);\n            // ... full decompiled method body\n        }\n        // ... all other members\n    }\n}"
+}
+```
+
+**Key Takeaway**: The server can introspect DLL code just like workspace code. Get symbol info to confirm you're looking at a NuGet type, then use `get_type_members` to see the full decompiled source.
+
+---
+
+### Example 4: Type Exploration - Workspace and DLL Types
+
+**Scenario**: Compare your custom `Result<T>` type with the standard `Task<T>` to understand patterns.
+
+```json
+// Step 1: Get members of your custom type (workspace code)
+{
+  "tool": "get_type_members",
+  "arguments": {
+    "typeName": "MyApp.Core.Result",
+    "includeImplementation": true
+  }
+}
+
+// Response:
+{
+  "typeName": "MyApp.Core.Result",
+  "namespace": "MyApp.Core",
+  "assembly": "MyApp.Core",
+  "kind": "Class",
+  "source": "// From workspace source file\nnamespace MyApp.Core\n{\n    public class Result<T>\n    {\n        public bool IsSuccess { get; }\n        public T Value { get; }\n        public string Error { get; }\n        \n        public static Result<T> Success(T value) => new Result<T>(value);\n        public static Result<T> Failure(string error) => new Result<T>(error);\n        // ... rest of source\n    }\n}",
+  "isFromMetadata": false
+}
+
+// Step 2: Get members of Task<T> from System DLLs (decompiled)
+{
+  "tool": "get_type_members",
+  "arguments": {
+    "typeName": "System.Threading.Tasks.Task",
+    "includeImplementation": true
+  }
+}
+
+// Response:
+{
+  "typeName": "System.Threading.Tasks.Task",
+  "namespace": "System.Threading.Tasks",
+  "assembly": "System.Private.CoreLib",
+  "kind": "Class",
+  "source": "// Decompiled with ICSharpCode.Decompiler\nnamespace System.Threading.Tasks\n{\n    public class Task<TResult> : Task\n    {\n        public TResult Result { get; }\n        public TaskAwaiter<TResult> GetAwaiter() { ... }\n        // ... full decompiled source\n    }\n}",
+  "isFromMetadata": true
+}
+
+// Step 3: Get signatures only for large types (more token-efficient)
+{
+  "tool": "get_type_members",
+  "arguments": {
+    "typeName": "System.Threading.Tasks.Task",
+    "includeImplementation": false
+  }
+}
+
+// Response includes just method signatures without implementations
+```
+
+**Key Takeaway**: `get_type_members` works identically for workspace code and DLL code. Use `includeImplementation: false` for signatures only (more token-efficient for large types).
+
+---
+
+### Example 5: Refactoring Workflow - Get Actions, Preview, Apply
+
+**Scenario**: You have a long method that needs to be refactored. Find available refactorings, preview changes, then apply.
+
+```json
+// Step 1: Get code actions available at the method
+{
+  "tool": "get_code_actions",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+    "line": 45,
+    "column": 20,
+    "endLine": 75,
+    "endColumn": 5
+  }
+}
+
+// Response:
+{
+  "actions": [
+    {
+      "id": "ExtractMethod_1",
+      "title": "Extract Method",
+      "kind": "Refactoring"
+    },
+    {
+      "id": "InlineTemporary_2",
+      "title": "Inline 'tempResult' variable",
+      "kind": "Refactoring"
+    },
+    {
+      "id": "ConvertToExpressionBody_3",
+      "title": "Use expression body for method",
+      "kind": "Refactoring"
+    }
+  ]
+}
+
+// Step 2: Preview the extract method refactoring
+{
+  "tool": "apply_code_action",
+  "arguments": {
+    "actionId": "ExtractMethod_1",
+    "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+    "preview": true
+  }
+}
+
+// Response:
+{
+  "changes": [
+    {
+      "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+      "diff": "@@ -45,30 +45,10 @@\n public async Task<OrderResult> ProcessOrder(Order order)\n {\n-    // Validate order\n-    if (order == null)\n-        throw new ArgumentNullException(nameof(order));\n-    if (order.Items.Count == 0)\n-        throw new InvalidOperationException(\"Order must have items\");\n-    // ... 20 more lines\n+    ValidateOrder(order);\n     var result = await _repository.SaveOrder(order);\n     return result;\n }\n+\n+private void ValidateOrder(Order order)\n+{\n+    if (order == null)\n+        throw new ArgumentNullException(nameof(order));\n+    if (order.Items.Count == 0)\n+        throw new InvalidOperationException(\"Order must have items\");\n+    // ... validation logic extracted here\n+}"
+    }
+  ]
+}
+
+// Step 3: Looks good! Apply it for real
+{
+  "tool": "apply_code_action",
+  "arguments": {
+    "actionId": "ExtractMethod_1",
+    "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+    "preview": false
+  }
+}
+
+// Response:
+{
+  "applied": true,
+  "modifiedFiles": [
+    "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs"
+  ]
+}
+
+// Step 4: Verify no new errors were introduced
+{
+  "tool": "get_diagnostics",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs"
+  }
+}
+
+// Response: diagnostics array is empty - success!
+```
+
+**Key Takeaway**: Always preview refactorings before applying. Code actions can span multiple files (e.g., rename, move type), so check the `modifiedFiles` list after applying.
+
+---
+
+### Example 6: Fixing Compiler Errors with Code Actions
+
+**Scenario**: You have a compiler error and want to see if there's an automatic fix.
+
+```json
+// Step 1: Get diagnostics and find an error with hasFix=true
+{
+  "tool": "get_diagnostics",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/UserController.cs"
+  }
+}
+
+// Response:
+{
+  "diagnostics": [
+    {
+      "id": "CS0246",
+      "severity": "Error",
+      "message": "The type or namespace name 'UserService' could not be found (are you missing a using directive or an assembly reference?)",
+      "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/UserController.cs",
+      "line": 15,
+      "column": 20,
+      "endLine": 15,
+      "endColumn": 31,
+      "hasFix": true
+    }
+  ]
+}
+
+// Step 2: Get code actions for this specific error
+{
+  "tool": "get_code_actions",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/UserController.cs",
+    "line": 15,
+    "column": 20,
+    "diagnosticIds": ["CS0246"]
+  }
+}
+
+// Response:
+{
+  "actions": [
+    {
+      "id": "AddUsing_MyApp.Core.Services",
+      "title": "using MyApp.Core.Services;",
+      "kind": "QuickFix"
+    },
+    {
+      "id": "FullyQualify_MyApp.Core.Services.UserService",
+      "title": "Fully qualify 'UserService'",
+      "kind": "QuickFix"
+    }
+  ]
+}
+
+// Step 3: Apply the "add using" fix
+{
+  "tool": "apply_code_action",
+  "arguments": {
+    "actionId": "AddUsing_MyApp.Core.Services",
+    "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/UserController.cs",
+    "preview": false
+  }
+}
+
+// Response:
+{
+  "applied": true,
+  "modifiedFiles": [
+    "/home/user/projects/MyApp/MyApp.Web/Controllers/UserController.cs"
+  ]
+}
+
+// Step 4: Verify the error is gone
+{
+  "tool": "get_diagnostics",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/UserController.cs"
+  }
+}
+
+// Response: diagnostics array is empty or no longer contains CS0246
+```
+
+**Key Takeaway**: Many compiler errors have automatic fixes. Use `hasFix: true` from diagnostics to identify fixable issues, then get and apply the appropriate code action.
+
+---
+
+### Example 7: Cross-Project Symbol Navigation
+
+**Scenario**: You're in a web controller calling a method from your Core library. You want to see the implementation.
+
+```json
+// Step 1: Get symbol info for the method call
+{
+  "tool": "get_symbol_info",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/OrderController.cs",
+    "line": 32,
+    "column": 45
+  }
+}
+
+// Response:
+{
+  "kind": "Method",
+  "name": "ProcessOrder",
+  "namespace": "MyApp.Core.Processing",
+  "assembly": "MyApp.Core",
+  "containingType": "OrderProcessor",
+  "modifiers": ["public", "async"],
+  "signature": "public async Task<OrderResult> ProcessOrder(Order order)",
+  "docComment": "Processes the given order and returns the result.",
+  "isFromMetadata": false
+}
+
+// Step 2: Navigate to the definition
+{
+  "tool": "get_definition_location",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Web/Controllers/OrderController.cs",
+    "line": 32,
+    "column": 45
+  }
+}
+
+// Response:
+{
+  "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+  "line": 45,
+  "column": 29,
+  "symbolKind": "Method",
+  "signature": "public async Task<OrderResult> ProcessOrder(Order order)"
+}
+
+// Step 3: Read the implementation at that location
+// (LLM would use file reading tools here)
+
+// Step 4: Find all other places this method is called
+{
+  "tool": "find_symbol_usages",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Core/OrderProcessor.cs",
+    "line": 45,
+    "column": 29
+  }
+}
+
+// Response shows all calls across all projects in solution
+```
+
+**Key Takeaway**: The server seamlessly navigates across project boundaries. Symbol info, definition location, and find usages all work across the entire solution.
+
+---
+
+### Example 8: Understanding Extension Methods
+
+**Scenario**: You see `.ToDictionary()` called on a collection and want to understand where it comes from and what other LINQ methods are available.
+
+```json
+// Step 1: Get symbol info for the extension method call
+{
+  "tool": "get_symbol_info",
+  "arguments": {
+    "file": "/home/user/projects/MyApp/MyApp.Core/DataProcessor.cs",
+    "line": 28,
+    "column": 35
+  }
+}
+
+// Response:
+{
+  "kind": "Method",
+  "name": "ToDictionary",
+  "namespace": "System.Linq",
+  "assembly": "System.Linq",
+  "containingType": "Enumerable",
+  "modifiers": ["public", "static"],
+  "signature": "public static Dictionary<TKey, TElement> ToDictionary<TSource, TKey, TElement>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector, Func<TSource, TElement> elementSelector)",
+  "docComment": "Creates a Dictionary<TKey,TValue> from an IEnumerable<T> according to specified key selector and element selector functions.",
+  "isExtensionMethod": true,
+  "isFromMetadata": true
+}
+
+// Step 2: Get all extension methods available for IEnumerable<T>
+{
+  "tool": "get_extension_methods",
+  "arguments": {
+    "typeName": "System.Collections.Generic.IEnumerable<T>",
+    "includeDocumentation": true
+  }
+}
+
+// Response:
+{
+  "typeName": "System.Collections.Generic.IEnumerable<T>",
+  "extensionMethods": [
+    {
+      "name": "Select",
+      "signature": "public static IEnumerable<TResult> Select<TSource, TResult>(this IEnumerable<TSource> source, Func<TSource, TResult> selector)",
+      "containingType": "System.Linq.Enumerable",
+      "assembly": "System.Linq",
+      "docComment": "Projects each element of a sequence into a new form."
+    },
+    {
+      "name": "Where",
+      "signature": "public static IEnumerable<TSource> Where<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)",
+      "containingType": "System.Linq.Enumerable",
+      "assembly": "System.Linq",
+      "docComment": "Filters a sequence of values based on a predicate."
+    },
+    {
+      "name": "ToDictionary",
+      "signature": "public static Dictionary<TKey, TElement> ToDictionary<TSource, TKey, TElement>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector, Func<TSource, TElement> elementSelector)",
+      "containingType": "System.Linq.Enumerable",
+      "assembly": "System.Linq",
+      "docComment": "Creates a Dictionary<TKey,TValue> from an IEnumerable<T>..."
+    }
+    // ... all other LINQ extension methods
+  ]
+}
+```
+
+**Key Takeaway**: Extension methods are first-class citizens. `get_symbol_info` identifies them, and `get_extension_methods` discovers all available extensions for a type - incredibly useful for API discovery.
+
+---
+
+## Best Practices for Using MCP Tools
+
+### 1. Start Broad, Then Narrow
+- Get workspace-wide diagnostics first, then filter by file or line range
+- Search for symbols across the solution, then focus on specific usages
+
+### 2. Always Preview Refactorings
+- Use `preview: true` before applying code actions that modify files
+- Check the diff to understand what will change
+- Multi-file refactorings (rename, move type) need extra caution
+
+### 3. Combine Tools for Complete Understanding
+- `get_symbol_info` → understand what something is
+- `get_definition_location` → see where it's defined
+- `find_symbol_usages` → see where it's used
+- `get_type_members` → see the full API surface
+
+### 4. Verify After Changes
+- Run `get_diagnostics` after applying code actions to catch new errors
+- Re-initialize workspace if major changes (project file edits, package additions)
+
+### 5. Leverage DLL Introspection
+- Don't grep NuGet package source - use `get_type_members` to decompile
+- Use `get_extension_methods` to discover APIs without reading docs
+- Symbol info always tells you if something is from metadata (`isFromMetadata: true`)
 
 ---
 

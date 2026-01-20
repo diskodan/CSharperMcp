@@ -10,7 +10,7 @@ namespace CSharperMcp.Server.Tools;
 internal static class GetDecompiledSourceTool
 {
     [McpServerTool]
-    [Description("Get decompiled C# source code for a type from a DLL (BCL, NuGet package, etc.). By default returns reference-assembly style output (type signature, member signatures, and documentation comments, but no method bodies). This is token-efficient and useful for understanding APIs. Set includeImplementation=true to get full source with method bodies (WARNING: can be very large for complex types like System.String or Dictionary).")]
+    [Description("Get decompiled C# source code for a type from a DLL (BCL, NuGet package, etc.). Specialized for DLL exploration - defaults to signatures-only mode for token efficiency (type signature, member signatures, and documentation comments, but no method bodies). Perfect for understanding API surfaces. Set includeImplementation=true for full source with method bodies (WARNING: can be very large for complex types). NOTE: For workspace types, use get_type_members instead - this tool only works with compiled DLL types.")]
     public static async Task<string> GetDecompiledSource(
         RoslynService roslynService,
         DecompilerService decompilerService,

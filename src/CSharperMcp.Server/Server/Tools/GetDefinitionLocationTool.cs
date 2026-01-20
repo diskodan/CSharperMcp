@@ -10,7 +10,7 @@ namespace CSharperMcp.Server.Tools;
 internal static class GetDefinitionLocationTool
 {
     [McpServerTool]
-    [Description("Navigate to the definition location of a symbol. For workspace symbols, returns file location for navigation. For DLL symbols (BCL, NuGet packages), returns metadata (assembly, type name, kind, signature) since they don't have navigable source. Use get_decompiled_source to get source code for DLL symbols. Use either (file + line + column) OR symbolName, not both.")]
+    [Description("Navigate to where a symbol is defined. This is a navigation-focused tool - it tells you WHERE to go, not WHAT the code is. For workspace symbols, returns file/line/column for jump-to-definition. For DLL symbols (BCL, NuGet packages), returns metadata only (assembly, type, kind, signature) since source files don't exist. To view the actual source code of DLL types, use get_decompiled_source or get_type_members after getting the location metadata. Use either (file + line + column) OR symbolName, not both.")]
     public static async Task<string> GetDefinitionLocation(
         RoslynService roslynService,
         ILogger<RoslynService> logger,
