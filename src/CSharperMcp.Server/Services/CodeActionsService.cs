@@ -438,7 +438,7 @@ internal class CodeActionsService(
             // If not preview mode, apply the changes to the workspace and persist to disk
             if (!preview)
             {
-                if (workspaceManager.Workspace.TryApplyChanges(newSolution))
+                if (workspaceManager.Workspace?.TryApplyChanges(newSolution) == true)
                 {
                     // Update the current solution
                     workspaceManager.UpdateCurrentSolution(newSolution);
