@@ -24,5 +24,11 @@ internal record DecompiledSourceInfo(
     bool IncludesImplementation,
 
     /// <summary>Number of lines in the decompiled source (for LLM context window planning)</summary>
-    int LineCount
+    int LineCount,
+
+    /// <summary>Whether the assembly appears to be obfuscated based on heuristic analysis</summary>
+    bool IsLikelyObfuscated,
+
+    /// <summary>Warning message if obfuscation is detected, null otherwise</summary>
+    string? ObfuscationWarning
 );

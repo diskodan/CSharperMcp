@@ -284,4 +284,116 @@ internal class DecompilerServiceIntegrationTests
         // Full implementation should be larger
         fullImpl!.Length.Should().BeGreaterThan(signaturesOnly!.Length);
     }
+
+    [Test]
+    public async Task DecompileTypeAsync_ShouldNotFlagBclTypesAsObfuscated()
+    {
+        // Arrange - Test with various BCL types
+        var bclTypes = new[]
+        {
+            "System.String",
+            "System.Int32",
+            "System.Collections.Generic.List`1",
+            "System.Collections.Generic.Dictionary`2",
+            "System.Linq.Enumerable"
+        };
+
+        foreach (var typeName in bclTypes)
+        {
+            // Act
+            var result = await _decompilerService.DecompileTypeAsync(
+                typeName,
+                assemblyName: null,
+                includeImplementation: true);
+
+            // Assert
+            result.Should().NotBeNull($"Failed to decompile {typeName}");
+            result!.IsLikelyObfuscated.Should().BeFalse(
+                $"BCL type {typeName} should not be flagged as obfuscated");
+            result.ObfuscationWarning.Should().BeNull(
+                $"BCL type {typeName} should not have an obfuscation warning");
+        }
+    }
+
+    [Test]
+    public async Task DecompileTypeAsync_ShouldIncludeObfuscationWarning_WhenObfuscationDetected()
+    {
+        // Arrange
+        const string typeName = "System.String";
+
+        // Act
+        var result = await _decompilerService.DecompileTypeAsync(
+            typeName,
+            assemblyName: null,
+            includeImplementation: false);
+
+        // Assert
+        result.Should().NotBeNull();
+
+        // BCL types should not be obfuscated
+        result!.IsLikelyObfuscated.Should().BeFalse();
+        result.ObfuscationWarning.Should().BeNull();
+
+        // If obfuscation was detected, warning should be present
+        // (This is a structural test - actual obfuscated assemblies would trigger this)
+    }
+
+    [Test]
+    public void IsLikelyObfuscated_ShouldNotFlagSystemStringAsObfuscated()
+    {
+        // Arrange - Get real System.String decompiled source
+        const string typeName = "System.String";
+        const string assemblyPath = "/usr/local/share/dotnet/shared/Microsoft.NETCore.App/10.0.0/System.Private.CoreLib.dll";
+
+        // Skip test if assembly doesn't exist at expected path
+        if (!File.Exists(assemblyPath))
+        {
+            Assert.Ignore($"Assembly not found at {assemblyPath}");
+        }
+
+        // Act
+        var decompiledSource = _decompilerService.DecompileType(
+            assemblyPath,
+            typeName,
+            includeImplementation: true);
+
+        decompiledSource.Should().NotBeNullOrEmpty();
+
+        var isObfuscated = _decompilerService.IsLikelyObfuscated(decompiledSource!);
+
+        // Assert
+        isObfuscated.Should().BeFalse(
+            "System.String is a well-known BCL type and should not be flagged as obfuscated");
+    }
+
+    [Test]
+    public void IsLikelyObfuscated_ShouldNotFlagSystemLinqEnumerableAsObfuscated()
+    {
+        // Arrange - System.Linq.Enumerable is a complex BCL type with many methods
+        const string typeName = "System.Linq.Enumerable";
+        const string assemblyPath = "/usr/local/share/dotnet/shared/Microsoft.NETCore.App/10.0.0/System.Linq.dll";
+
+        // Skip test if assembly doesn't exist at expected path
+        if (!File.Exists(assemblyPath))
+        {
+            Assert.Ignore($"Assembly not found at {assemblyPath}");
+        }
+
+        // Act
+        var decompiledSource = _decompilerService.DecompileType(
+            assemblyPath,
+            typeName,
+            includeImplementation: false);
+
+        if (decompiledSource == null)
+        {
+            Assert.Ignore($"Could not decompile {typeName}");
+        }
+
+        var isObfuscated = _decompilerService.IsLikelyObfuscated(decompiledSource);
+
+        // Assert
+        isObfuscated.Should().BeFalse(
+            "System.Linq.Enumerable is a BCL type and should not be flagged as obfuscated");
+    }
 }

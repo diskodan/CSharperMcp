@@ -650,7 +650,9 @@ internal class RoslynService(
                 true,
                 filePath,
                 includeImplementation,
-                lineCount
+                lineCount,
+                false,  // Workspace types are never obfuscated
+                null    // No obfuscation warning for workspace types
             );
         }
         else
@@ -713,6 +715,12 @@ internal class RoslynService(
                 package = assemblyName;
             }
 
+            // Detect obfuscation
+            var isObfuscated = decompilerService.IsLikelyObfuscated(decompiledSource);
+            string? obfuscationWarning = isObfuscated
+                ? "This assembly appears to be obfuscated. Decompiled source may contain unreadable identifiers and may not accurately represent the original code structure."
+                : null;
+
             return new TypeMembersInfo(
                 decompiledSource,
                 typeSymbol.Name,
@@ -722,7 +730,9 @@ internal class RoslynService(
                 false,
                 null,
                 includeImplementation,
-                lineCount
+                lineCount,
+                isObfuscated,
+                obfuscationWarning
             );
         }
     }

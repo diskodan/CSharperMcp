@@ -38,7 +38,9 @@ internal static class GetTypeMembersTool
                 filePath = typeMembers.FilePath,
                 sourceCode = typeMembers.SourceCode,
                 includesImplementation = typeMembers.IncludesImplementation,
-                lineCount = typeMembers.LineCount
+                lineCount = typeMembers.LineCount,
+                isLikelyObfuscated = typeMembers.IsLikelyObfuscated,
+                obfuscationWarning = typeMembers.ObfuscationWarning
             });
         }
         catch (Exception ex)

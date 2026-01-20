@@ -30,5 +30,11 @@ internal record TypeMembersInfo(
     bool IncludesImplementation,
 
     /// <summary>Number of lines in the source code (for size estimation)</summary>
-    int LineCount
+    int LineCount,
+
+    /// <summary>Whether the assembly appears to be obfuscated based on heuristic analysis (only set for decompiled types)</summary>
+    bool IsLikelyObfuscated,
+
+    /// <summary>Warning message if obfuscation is detected, null otherwise (only set for decompiled types)</summary>
+    string? ObfuscationWarning
 );
