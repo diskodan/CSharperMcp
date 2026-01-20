@@ -7,6 +7,70 @@ namespace CSharperMcp.Server.UnitTests.Services;
 public class CodeActionsServiceTests
 {
     [Test]
+    public void CodeActionsResult_WithFullPage_HasCorrectProperties()
+    {
+        // Arrange
+        var actions = new List<CodeActionInfo>
+        {
+            new CodeActionInfo("id1", "Action 1", "QuickFix", new[] { "CS0001" }),
+            new CodeActionInfo("id2", "Action 2", "QuickFix", new[] { "CS0002" }),
+            new CodeActionInfo("id3", "Action 3", "Refactor", Array.Empty<string>())
+        };
+
+        // Act
+        var result = new CodeActionsResult(
+            Actions: actions,
+            TotalCount: 10,
+            ReturnedCount: 3,
+            HasMore: true
+        );
+
+        // Assert
+        result.Actions.Should().HaveCount(3);
+        result.TotalCount.Should().Be(10);
+        result.ReturnedCount.Should().Be(3);
+        result.HasMore.Should().BeTrue();
+    }
+
+    [Test]
+    public void CodeActionsResult_WithLastPage_HasMoreIsFalse()
+    {
+        // Arrange & Act
+        var result = new CodeActionsResult(
+            Actions: new List<CodeActionInfo>
+            {
+                new CodeActionInfo("id1", "Action 1", "QuickFix", new[] { "CS0001" })
+            },
+            TotalCount: 1,
+            ReturnedCount: 1,
+            HasMore: false
+        );
+
+        // Assert
+        result.HasMore.Should().BeFalse();
+        result.TotalCount.Should().Be(result.ReturnedCount);
+    }
+
+    [Test]
+    public void CodeActionsResult_WithEmptyResults_HasCorrectProperties()
+    {
+        // Arrange & Act
+        var result = new CodeActionsResult(
+            Actions: Array.Empty<CodeActionInfo>(),
+            TotalCount: 0,
+            ReturnedCount: 0,
+            HasMore: false
+        );
+
+        // Assert
+        result.Actions.Should().BeEmpty();
+        result.TotalCount.Should().Be(0);
+        result.ReturnedCount.Should().Be(0);
+        result.HasMore.Should().BeFalse();
+    }
+
+
+    [Test]
     public void ApplyCodeActionResult_WithSuccess_HasExpectedProperties()
     {
         // Arrange & Act

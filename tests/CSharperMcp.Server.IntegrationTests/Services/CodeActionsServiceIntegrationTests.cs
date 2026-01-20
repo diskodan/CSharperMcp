@@ -58,13 +58,16 @@ internal class CodeActionsServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Get code actions at line with CS0103 error (undeclared variable)
-        var actions = (await _sut.GetCodeActionsAsync(
+        var result = await _sut.GetCodeActionsAsync(
             filePath: "ClassWithErrors.cs",
             line: 8,
-            column: 1)).ToList();
+            column: 1);
 
         // Assert - Should find actions for the diagnostic at this location
-        actions.Should().NotBeNull();
+        result.Should().NotBeNull();
+        result.Actions.Should().NotBeNull();
+        result.TotalCount.Should().Be(result.Actions.Count);
+        result.ReturnedCount.Should().Be(result.Actions.Count);
         // Note: Actual action discovery depends on having CS0103 at line 8
         // If no actions found, it means the diagnostic isn't at exactly that location
         // or our known fixable diagnostics doesn't include it
@@ -78,13 +81,16 @@ internal class CodeActionsServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Get code actions at a line with no errors
-        var actions = (await _sut.GetCodeActionsAsync(
+        var result = await _sut.GetCodeActionsAsync(
             filePath: "Calculator.cs",
             line: 5,
-            column: 1)).ToList();
+            column: 1);
 
         // Assert - Should return empty (no diagnostics = no fixes)
-        actions.Should().BeEmpty();
+        result.Actions.Should().BeEmpty();
+        result.TotalCount.Should().Be(0);
+        result.ReturnedCount.Should().Be(0);
+        result.HasMore.Should().BeFalse();
     }
 
     [Test]
@@ -95,13 +101,16 @@ internal class CodeActionsServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var actions = (await _sut.GetCodeActionsAsync(
+        var result = await _sut.GetCodeActionsAsync(
             filePath: "NonExistent.cs",
             line: 1,
-            column: 1)).ToList();
+            column: 1);
 
         // Assert
-        actions.Should().BeEmpty();
+        result.Actions.Should().BeEmpty();
+        result.TotalCount.Should().Be(0);
+        result.ReturnedCount.Should().Be(0);
+        result.HasMore.Should().BeFalse();
     }
 
     [Test]
@@ -123,19 +132,19 @@ internal class CodeActionsServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // First, get code actions to populate the cache
-        var actions = (await _sut.GetCodeActionsAsync(
+        var actionsResult = await _sut.GetCodeActionsAsync(
             filePath: "ClassWithErrors.cs",
             line: 8,
-            column: 1)).ToList();
+            column: 1);
 
         // Skip test if no actions found (means no fixable diagnostics at this location)
-        if (!actions.Any())
+        if (!actionsResult.Actions.Any())
         {
             Assert.Inconclusive("No code actions found at the specified location");
             return;
         }
 
-        var firstAction = actions.First();
+        var firstAction = actionsResult.Actions.First();
 
         // Act - Apply in preview mode
         var result = await _sut.ApplyCodeActionAsync(firstAction.Id, preview: true);
@@ -201,19 +210,19 @@ internal class CodeActionsServiceIntegrationTests
             await _workspaceManager.InitializeAsync(solutionPath);
 
             // First, get code actions to populate the cache
-            var actions = (await _sut.GetCodeActionsAsync(
+            var actionsResult = await _sut.GetCodeActionsAsync(
                 filePath: "ClassWithErrors.cs",
                 line: 8,
-                column: 1)).ToList();
+                column: 1);
 
             // Skip test if no actions found
-            if (!actions.Any())
+            if (!actionsResult.Actions.Any())
             {
                 Assert.Inconclusive("No code actions found at the specified location");
                 return;
             }
 
-            var firstAction = actions.First();
+            var firstAction = actionsResult.Actions.First();
             var originalContent = File.Exists(targetFile) ? await File.ReadAllTextAsync(targetFile) : null;
 
             // Act - Apply without preview
@@ -238,6 +247,178 @@ internal class CodeActionsServiceIntegrationTests
                 File.Copy(backupFile, targetFile, overwrite: true);
                 File.Delete(backupFile);
             }
+        }
+    }
+
+    [Test]
+    public async Task GetCodeActionsAsync_WithMaxResults_LimitsResultCount()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get all actions first to know total count
+        var allActionsResult = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1,
+            maxResults: 1000); // High limit to get all
+
+        // Skip test if no actions found
+        if (allActionsResult.TotalCount == 0)
+        {
+            Assert.Inconclusive("No code actions found at the specified location");
+            return;
+        }
+
+        // Act - Now request with a smaller limit
+        var limitedResult = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1,
+            maxResults: 2);
+
+        // Assert
+        limitedResult.TotalCount.Should().Be(allActionsResult.TotalCount, "Total count should reflect all available actions");
+        limitedResult.ReturnedCount.Should().BeLessOrEqualTo(2, "Should not return more than maxResults");
+        limitedResult.Actions.Count.Should().Be(limitedResult.ReturnedCount);
+
+        if (allActionsResult.TotalCount > 2)
+        {
+            limitedResult.HasMore.Should().BeTrue("HasMore should be true when there are more results available");
+        }
+    }
+
+    [Test]
+    public async Task GetCodeActionsAsync_WithOffset_SkipsResults()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get all actions first
+        var allActionsResult = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1,
+            maxResults: 1000);
+
+        // Skip test if not enough actions
+        if (allActionsResult.TotalCount < 3)
+        {
+            Assert.Inconclusive("Need at least 3 code actions, found " + allActionsResult.TotalCount);
+            return;
+        }
+
+        // Act - Get with offset
+        var offsetResult = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1,
+            maxResults: 2,
+            offset: 1);
+
+        // Assert
+        offsetResult.TotalCount.Should().Be(allActionsResult.TotalCount);
+        offsetResult.ReturnedCount.Should().BeLessOrEqualTo(2);
+        offsetResult.Actions.Should().NotBeEmpty();
+
+        // The first action in offsetResult should be the second action in allActionsResult
+        if (allActionsResult.Actions.Count > 1 && offsetResult.Actions.Count > 0)
+        {
+            offsetResult.Actions[0].Id.Should().Be(allActionsResult.Actions[1].Id,
+                "Offset should skip the first action");
+        }
+    }
+
+    [Test]
+    public async Task GetCodeActionsAsync_WithOffsetBeyondTotal_ReturnsEmpty()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get all actions first to know total
+        var allActionsResult = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1);
+
+        // Act - Request with offset beyond total
+        var result = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1,
+            offset: allActionsResult.TotalCount + 10);
+
+        // Assert
+        result.TotalCount.Should().Be(allActionsResult.TotalCount, "Total count should remain the same");
+        result.ReturnedCount.Should().Be(0, "Should return no results when offset is beyond total");
+        result.Actions.Should().BeEmpty();
+        result.HasMore.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetCodeActionsAsync_LastPage_HasMoreIsFalse()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - Get all actions first
+        var allActionsResult = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1);
+
+        // Skip test if no actions
+        if (allActionsResult.TotalCount == 0)
+        {
+            Assert.Inconclusive("No code actions found");
+            return;
+        }
+
+        // Act - Request exactly the total count (last page)
+        var lastPageResult = await _sut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs",
+            line: 8,
+            column: 1,
+            maxResults: allActionsResult.TotalCount,
+            offset: 0);
+
+        // Assert
+        lastPageResult.HasMore.Should().BeFalse("HasMore should be false on the last page");
+        lastPageResult.ReturnedCount.Should().Be(allActionsResult.TotalCount);
+    }
+
+    [Test]
+    public async Task GetCodeActionsAsync_DefaultMaxResults_Is50()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Create a custom filter config that allows more than 50 results
+        var customFilterConfig = Options.Create(new CodeActionFilterConfiguration
+        {
+            MaxResults = 1000, // Allow up to 1000 in filtering
+            IncludeRefactorings = true
+        });
+        var customSut = new CodeActionsService(_workspaceManager, _providerService, customFilterConfig, _codeActionsLoggerMock.Object);
+
+        // Act - Call without specifying maxResults (should default to 50)
+        var result = await customSut.GetCodeActionsAsync(
+            filePath: "ClassWithErrors.cs");
+
+        // Assert - If there are more than 50 actions available, only 50 should be returned
+        if (result.TotalCount > 50)
+        {
+            result.ReturnedCount.Should().Be(50, "Default maxResults should be 50");
+            result.HasMore.Should().BeTrue();
+        }
+        else
+        {
+            result.ReturnedCount.Should().Be(result.TotalCount);
         }
     }
 }

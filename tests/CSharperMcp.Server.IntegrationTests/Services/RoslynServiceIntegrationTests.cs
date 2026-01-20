@@ -55,16 +55,17 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var diagnostics = (await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Warning)).ToList();
+        var (diagnostics, _) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Warning);
+        var diagnosticsList = diagnostics.ToList();
 
         // Assert - we expect specific errors from our test fixture:
         // CS0103 (line 8): undeclared variable
         // CS0029 (line 14): type conversion error
         // CS1061 (line 21): missing method
         // CS0414 (line 6): unused field warning
-        diagnostics.Should().NotBeEmpty();
+        diagnosticsList.Should().NotBeEmpty();
 
-        var errorCodes = diagnostics.Select(d => d.Id).Distinct().ToList();
+        var errorCodes = diagnosticsList.Select(d => d.Id).Distinct().ToList();
         errorCodes.Should().Contain("CS0103", because: "fixture has undeclared variable");
         errorCodes.Should().Contain("CS0029", because: "fixture has type conversion error");
         errorCodes.Should().Contain("CS1061", because: "fixture has missing method");
@@ -79,10 +80,11 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - get errors only (not warnings)
-        var diagnostics = (await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Error)).ToList();
+        var (diagnostics, _) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Error);
+        var diagnosticsList = diagnostics.ToList();
 
         // Assert - SimpleSolution should compile cleanly
-        diagnostics.Should().BeEmpty(because: "SimpleSolution has no errors");
+        diagnosticsList.Should().BeEmpty(because: "SimpleSolution has no errors");
     }
 
     [Test]
@@ -93,13 +95,14 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - filter to only ClassWithErrors.cs
-        var diagnostics = (await _sut.GetDiagnosticsAsync(
+        var (diagnostics, _) = await _sut.GetDiagnosticsAsync(
             filePath: "ClassWithErrors.cs",
-            minimumSeverity: DiagnosticSeverity.Warning)).ToList();
+            minimumSeverity: DiagnosticSeverity.Warning);
+        var diagnosticsList = diagnostics.ToList();
 
         // Assert - should only get diagnostics from ClassWithErrors.cs
-        diagnostics.Should().NotBeEmpty();
-        diagnostics.Should().AllSatisfy(d =>
+        diagnosticsList.Should().NotBeEmpty();
+        diagnosticsList.Should().AllSatisfy(d =>
             d.Location.SourceTree?.FilePath.Should().EndWith("ClassWithErrors.cs"));
     }
 
@@ -111,14 +114,15 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - filter to lines 1-10 (should include CS0103 on line 8)
-        var diagnostics = (await _sut.GetDiagnosticsAsync(
+        var (diagnostics, _) = await _sut.GetDiagnosticsAsync(
             startLine: 1,
             endLine: 10,
-            minimumSeverity: DiagnosticSeverity.Error)).ToList();
+            minimumSeverity: DiagnosticSeverity.Error);
+        var diagnosticsList = diagnostics.ToList();
 
         // Assert - should find CS0103 error around line 8
-        diagnostics.Should().NotBeEmpty();
-        diagnostics.Should().Contain(d => d.Id == "CS0103");
+        diagnosticsList.Should().NotBeEmpty();
+        diagnosticsList.Should().Contain(d => d.Id == "CS0103");
     }
 
     [Test]
@@ -129,13 +133,14 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - get errors only (should exclude CS0414 warning)
-        var errorDiagnostics = (await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Error)).ToList();
+        var (errorDiagnostics, _) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Error);
+        var errorDiagnosticsList = errorDiagnostics.ToList();
 
         // Assert
-        errorDiagnostics.Should().NotBeEmpty();
-        errorDiagnostics.Should().AllSatisfy(d =>
+        errorDiagnosticsList.Should().NotBeEmpty();
+        errorDiagnosticsList.Should().AllSatisfy(d =>
             d.Severity.Should().Be(DiagnosticSeverity.Error));
-        errorDiagnostics.Should().NotContain(d => d.Id == "CS0414",
+        errorDiagnosticsList.Should().NotContain(d => d.Id == "CS0414",
             because: "CS0414 is a warning, not an error");
     }
 
@@ -158,10 +163,11 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - get errors (should be none)
-        var diagnostics = (await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Error)).ToList();
+        var (diagnostics, _) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Error);
+        var diagnosticsList = diagnostics.ToList();
 
         // Assert - SolutionWithNuGet should compile cleanly with NuGet references resolved
-        diagnostics.Should().BeEmpty(because: "SolutionWithNuGet has no errors when NuGet packages are resolved");
+        diagnosticsList.Should().BeEmpty(because: "SolutionWithNuGet has no errors when NuGet packages are resolved");
     }
 
     [Test]
@@ -267,7 +273,8 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Find references to Calculator.Add method (defined at Calculator.cs line 5)
-        var references = (await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16)).ToList();
+        var result = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var references = result.References.ToList();
 
         // Assert - Should find the definition + 3 usages in Program.cs
         references.Should().NotBeEmpty();
@@ -286,7 +293,8 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act - Find references to Calculator type
-        var references = (await _sut.FindReferencesAsync(symbolName: "SimpleProject.Calculator")).ToList();
+        var result = await _sut.FindReferencesAsync(symbolName: "SimpleProject.Calculator");
+        var references = result.References;
 
         // Assert - Should find instantiation in Program.cs
         references.Should().NotBeEmpty();
@@ -303,7 +311,8 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var references = (await _sut.FindReferencesAsync(filePath: "NonExistent.cs", line: 1, column: 1)).ToList();
+        var result = await _sut.FindReferencesAsync(filePath: "NonExistent.cs", line: 1, column: 1);
+        var references = result.References;
 
         // Assert
         references.Should().BeEmpty();
@@ -317,7 +326,8 @@ internal class RoslynServiceIntegrationTests
         await _workspaceManager.InitializeAsync(solutionPath);
 
         // Act
-        var references = (await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16)).ToList();
+        var result = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var references = result.References.ToList();
 
         // Assert
         references.Should().NotBeEmpty();
@@ -502,5 +512,292 @@ internal class RoslynServiceIntegrationTests
 
         // Assert
         typeMembers.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetDiagnosticsAsync_WithPagination_ReturnsCorrectSubset()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Get all diagnostics first to know the total count
+        var (allDiagnostics, totalCount) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Warning);
+        var allDiagnosticsList = allDiagnostics.ToList();
+
+        // Act - get first 2 diagnostics
+        var (firstPage, firstPageTotal) = await _sut.GetDiagnosticsAsync(
+            minimumSeverity: DiagnosticSeverity.Warning,
+            maxResults: 2,
+            offset: 0);
+        var firstPageList = firstPage.ToList();
+
+        // Assert
+        firstPageTotal.Should().Be(totalCount);
+        firstPageList.Should().HaveCount(2);
+        firstPageList[0].Id.Should().Be(allDiagnosticsList[0].Id);
+        firstPageList[1].Id.Should().Be(allDiagnosticsList[1].Id);
+    }
+
+    [Test]
+    public async Task GetDiagnosticsAsync_WithOffset_ReturnsCorrectPage()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Get all diagnostics first
+        var (allDiagnostics, totalCount) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Warning);
+        var allDiagnosticsList = allDiagnostics.ToList();
+
+        // Act - get second page (skip 2, take 2)
+        var (secondPage, secondPageTotal) = await _sut.GetDiagnosticsAsync(
+            minimumSeverity: DiagnosticSeverity.Warning,
+            maxResults: 2,
+            offset: 2);
+        var secondPageList = secondPage.ToList();
+
+        // Assert
+        secondPageTotal.Should().Be(totalCount);
+        if (totalCount > 2)
+        {
+            secondPageList.Should().HaveCountLessOrEqualTo(2);
+            secondPageList[0].Id.Should().Be(allDiagnosticsList[2].Id);
+        }
+    }
+
+    [Test]
+    public async Task GetDiagnosticsAsync_WithOffsetBeyondTotal_ReturnsEmpty()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Get total count
+        var (_, totalCount) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Warning);
+
+        // Act - request beyond total
+        var (diagnostics, returnedTotal) = await _sut.GetDiagnosticsAsync(
+            minimumSeverity: DiagnosticSeverity.Warning,
+            maxResults: 10,
+            offset: totalCount + 100);
+        var diagnosticsList = diagnostics.ToList();
+
+        // Assert
+        returnedTotal.Should().Be(totalCount);
+        diagnosticsList.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task GetDiagnosticsAsync_DefaultPagination_Returns100OrLess()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SolutionWithErrors"), "SolutionWithErrors.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act - use default pagination (maxResults = 100)
+        var (diagnostics, totalCount) = await _sut.GetDiagnosticsAsync(minimumSeverity: DiagnosticSeverity.Warning);
+        var diagnosticsList = diagnostics.ToList();
+
+        // Assert - should return at most 100 results
+        diagnosticsList.Should().HaveCountLessOrEqualTo(100);
+        totalCount.Should().BeGreaterOrEqualTo(diagnosticsList.Count);
+    }
+    [Test]
+    public async Task FindReferencesAsync_WithPagination_ReturnsCorrectSubset()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Get all references first
+        var allResult = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var totalCount = allResult.TotalCount;
+
+        // Act - Get first 2 references
+        var firstPageResult = await _sut.FindReferencesAsync(
+            filePath: "Calculator.cs",
+            line: 5,
+            column: 16,
+            maxResults: 2,
+            offset: 0);
+
+        // Assert
+        firstPageResult.TotalCount.Should().Be(totalCount);
+        firstPageResult.References.Should().HaveCountLessOrEqualTo(2);
+        firstPageResult.HasMore.Should().Be(totalCount > 2);
+
+        if (totalCount > 2)
+        {
+            firstPageResult.References.Count.Should().Be(2);
+        }
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_WithOffset_SkipsCorrectNumberOfResults()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Get all references
+        var allResult = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var allReferences = allResult.References.ToList();
+        var totalCount = allResult.TotalCount;
+
+        if (totalCount < 3)
+        {
+            Assert.Inconclusive("Need at least 3 references for this test");
+            return;
+        }
+
+        // Act - Skip first 2 references
+        var offsetResult = await _sut.FindReferencesAsync(
+            filePath: "Calculator.cs",
+            line: 5,
+            column: 16,
+            maxResults: 100,
+            offset: 2);
+
+        // Assert
+        offsetResult.TotalCount.Should().Be(totalCount);
+        offsetResult.References.Should().HaveCount(totalCount - 2);
+        
+        // First reference in offset result should match third reference from all results
+        if (offsetResult.References.Count > 0)
+        {
+            offsetResult.References[0].FilePath.Should().Be(allReferences[2].FilePath);
+            offsetResult.References[0].Line.Should().Be(allReferences[2].Line);
+            offsetResult.References[0].Column.Should().Be(allReferences[2].Column);
+        }
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_WithContextLinesOne_ReturnsSingleLine()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var result = await _sut.FindReferencesAsync(
+            filePath: "Calculator.cs",
+            line: 5,
+            column: 16,
+            contextLines: 1);
+
+        // Assert
+        result.References.Should().NotBeEmpty();
+        foreach (var reference in result.References)
+        {
+            // Context should be a single line (no newlines)
+            reference.ContextSnippet.Should().NotContain(Environment.NewLine);
+        }
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_WithContextLinesThree_ReturnsThreeLines()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var result = await _sut.FindReferencesAsync(
+            filePath: "Calculator.cs",
+            line: 5,
+            column: 16,
+            contextLines: 3);
+
+        // Assert
+        result.References.Should().NotBeEmpty();
+        
+        // Find a reference that's not on the first or last line of the file
+        var middleReference = result.References.FirstOrDefault(r => 
+            r.Line > 1 && 
+            r.FilePath.EndsWith("Program.cs"));
+
+        if (middleReference != null)
+        {
+            // Context should have 3 lines (or fewer if near file boundaries)
+            var lines = middleReference.ContextSnippet.Split(Environment.NewLine);
+            lines.Should().HaveCountGreaterOrEqualTo(2); // At least 2 lines
+            lines.Should().HaveCountLessOrEqualTo(3); // At most 3 lines
+        }
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_WithContextLinesFive_ReturnsFiveLines()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Act
+        var result = await _sut.FindReferencesAsync(
+            filePath: "Calculator.cs",
+            line: 5,
+            column: 16,
+            contextLines: 5);
+
+        // Assert
+        result.References.Should().NotBeEmpty();
+        
+        // Find a reference in the middle of a file
+        var middleReference = result.References.FirstOrDefault(r => 
+            r.Line > 2 && 
+            r.FilePath.EndsWith("Program.cs"));
+
+        if (middleReference != null)
+        {
+            // Context should have up to 5 lines (2 before, current, 2 after)
+            var lines = middleReference.ContextSnippet.Split(Environment.NewLine);
+            lines.Should().HaveCountGreaterOrEqualTo(3); // At least 3 lines
+            lines.Should().HaveCountLessOrEqualTo(5); // At most 5 lines
+        }
+    }
+
+    [Test]
+    public async Task FindReferencesAsync_PaginationMetadata_IsAccurate()
+    {
+        // Arrange
+        var solutionPath = Path.Combine(GetFixturePath("SimpleSolution"), "SimpleSolution.sln");
+        await _workspaceManager.InitializeAsync(solutionPath);
+
+        // Get all references
+        var allResult = await _sut.FindReferencesAsync(filePath: "Calculator.cs", line: 5, column: 16);
+        var totalCount = allResult.TotalCount;
+
+        if (totalCount < 2)
+        {
+            Assert.Inconclusive("Need at least 2 references for this test");
+            return;
+        }
+
+        // Act - Get first page with maxResults = 1
+        var firstPage = await _sut.FindReferencesAsync(
+            filePath: "Calculator.cs",
+            line: 5,
+            column: 16,
+            maxResults: 1,
+            offset: 0);
+
+        // Assert first page
+        firstPage.TotalCount.Should().Be(totalCount);
+        firstPage.References.Should().HaveCount(1);
+        firstPage.HasMore.Should().BeTrue();
+
+        // Act - Get last page
+        var lastPage = await _sut.FindReferencesAsync(
+            filePath: "Calculator.cs",
+            line: 5,
+            column: 16,
+            maxResults: 100,
+            offset: totalCount - 1);
+
+        // Assert last page
+        lastPage.TotalCount.Should().Be(totalCount);
+        lastPage.References.Should().HaveCount(1);
+        lastPage.HasMore.Should().BeFalse();
     }
 }

@@ -17,11 +17,13 @@ internal class RoslynService(
     ILogger<RoslynService> logger)
 {
 
-    public async Task<IEnumerable<Diagnostic>> GetDiagnosticsAsync(
+    public async Task<(IEnumerable<Diagnostic> diagnostics, int totalCount)> GetDiagnosticsAsync(
         string? filePath = null,
         int? startLine = null,
         int? endLine = null,
         DiagnosticSeverity minimumSeverity = DiagnosticSeverity.Warning,
+        int maxResults = 100,
+        int offset = 0,
         CancellationToken cancellationToken = default)
     {
         if (workspaceManager.CurrentSolution == null)
@@ -30,7 +32,7 @@ internal class RoslynService(
         }
 
         using var timeoutCts = OperationTimeout.CreateLinked(cancellationToken, OperationTimeout.Quick);
-        var diagnostics = new List<Diagnostic>();
+        var allDiagnostics = new List<Diagnostic>();
 
         try
         {
@@ -99,10 +101,18 @@ internal class RoslynService(
                 });
             }
 
-                diagnostics.AddRange(projectDiagnostics);
+                allDiagnostics.AddRange(projectDiagnostics);
             }
 
-            return diagnostics;
+            // Calculate total count before pagination
+            var totalCount = allDiagnostics.Count;
+
+            // Apply pagination
+            var paginatedDiagnostics = allDiagnostics
+                .Skip(offset)
+                .Take(maxResults);
+
+            return (paginatedDiagnostics, totalCount);
         }
         catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested)
         {
@@ -121,11 +131,12 @@ internal class RoslynService(
         }
     }
 
-    public async Task<Models.SymbolInfo?> GetSymbolInfoAsync(
+    public virtual async Task<Models.SymbolInfo?> GetSymbolInfoAsync(
         string? filePath = null,
         int? line = null,
         int? column = null,
-        string? symbolName = null)
+        string? symbolName = null,
+        bool includeDocumentation = false)
     {
         if (workspaceManager.CurrentSolution == null)
         {
@@ -174,7 +185,7 @@ internal class RoslynService(
 
         if (symbol == null) return null;
 
-        return MapSymbolToSymbolInfo(symbol);
+        return MapSymbolToSymbolInfo(symbol, includeDocumentation);
     }
 
     private Document? FindDocument(string filePath)
@@ -191,7 +202,7 @@ internal class RoslynService(
         return null;
     }
 
-    private static Models.SymbolInfo MapSymbolToSymbolInfo(ISymbol symbol)
+    private static Models.SymbolInfo MapSymbolToSymbolInfo(ISymbol symbol, bool includeDocumentation)
     {
         var kind = symbol.Kind.ToString();
         var name = symbol.Name;
@@ -210,7 +221,8 @@ internal class RoslynService(
             package = assembly;
         }
 
-        var docComment = symbol.GetDocumentationCommentXml();
+        // Only include documentation if requested
+        var docComment = includeDocumentation ? symbol.GetDocumentationCommentXml() : null;
         var modifiers = GetModifiers(symbol);
 
         string? signature = null;
@@ -227,13 +239,21 @@ internal class RoslynService(
             signature = type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
         }
 
-        string? definitionLocation = null;
+        // Determine if symbol is from workspace and get source location
+        bool isFromWorkspace = false;
+        string? sourceFile = null;
+        int? sourceLine = null;
+        int? sourceColumn = null;
+
         var locations = symbol.Locations;
         if (locations.Length > 0 && locations[0].IsInSource)
         {
+            isFromWorkspace = true;
             var loc = locations[0];
             var lineSpan = loc.GetLineSpan();
-            definitionLocation = $"{loc.SourceTree?.FilePath}:{lineSpan.StartLinePosition.Line + 1}:{lineSpan.StartLinePosition.Character + 1}";
+            sourceFile = loc.SourceTree?.FilePath;
+            sourceLine = lineSpan.StartLinePosition.Line + 1; // Convert to 1-based
+            sourceColumn = lineSpan.StartLinePosition.Character + 1; // Convert to 1-based
         }
 
         return new Models.SymbolInfo(
@@ -246,7 +266,10 @@ internal class RoslynService(
             docComment,
             modifiers,
             signature,
-            definitionLocation
+            isFromWorkspace,
+            sourceFile,
+            sourceLine,
+            sourceColumn
         );
     }
 
@@ -265,15 +288,34 @@ internal class RoslynService(
         return modifiers;
     }
 
-    public async Task<IEnumerable<ReferenceInfo>> FindReferencesAsync(
+    public async Task<FindReferencesResult> FindReferencesAsync(
         string? filePath = null,
         int? line = null,
         int? column = null,
-        string? symbolName = null)
+        string? symbolName = null,
+        int maxResults = 100,
+        int offset = 0,
+        int contextLines = 1)
     {
         if (workspaceManager.CurrentSolution == null)
         {
             throw new InvalidOperationException("Workspace not initialized");
+        }
+
+        // Validate parameters
+        if (maxResults < 1)
+        {
+            throw new ArgumentException("maxResults must be at least 1", nameof(maxResults));
+        }
+
+        if (offset < 0)
+        {
+            throw new ArgumentException("offset must be non-negative", nameof(offset));
+        }
+
+        if (contextLines < 1)
+        {
+            throw new ArgumentException("contextLines must be at least 1", nameof(contextLines));
         }
 
         ISymbol? symbol = null;
@@ -285,20 +327,20 @@ internal class RoslynService(
             if (document == null)
             {
                 logger.LogWarning("Document not found: {FilePath}", filePath);
-                return Array.Empty<ReferenceInfo>();
+                return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
             }
 
             var sourceText = await document.GetTextAsync();
             var position = sourceText.Lines[line.Value - 1].Start + column.Value - 1;
 
             var semanticModel = await document.GetSemanticModelAsync();
-            if (semanticModel == null) return Array.Empty<ReferenceInfo>();
+            if (semanticModel == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
 
             var syntaxRoot = await document.GetSyntaxRootAsync();
-            if (syntaxRoot == null) return Array.Empty<ReferenceInfo>();
+            if (syntaxRoot == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
 
             var node = syntaxRoot.FindToken(position).Parent;
-            if (node == null) return Array.Empty<ReferenceInfo>();
+            if (node == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
 
             var symbolInfo = semanticModel.GetSymbolInfo(node);
             symbol = symbolInfo.Symbol ?? semanticModel.GetDeclaredSymbol(node);
@@ -316,7 +358,7 @@ internal class RoslynService(
             }
         }
 
-        if (symbol == null) return Array.Empty<ReferenceInfo>();
+        if (symbol == null) return new FindReferencesResult(0, false, Array.Empty<ReferenceInfo>());
 
         // Find all references
         var references = await SymbolFinder.FindReferencesAsync(
@@ -338,9 +380,8 @@ internal class RoslynService(
                 var endLine = lineSpan.EndLinePosition.Line + 1;
                 var endColumn = lineSpan.EndLinePosition.Character + 1;
 
-                // Get context snippet (the line containing the reference)
-                var textLine = sourceText.Lines[lineSpan.StartLinePosition.Line];
-                var contextSnippet = textLine.ToString().Trim();
+                // Get context snippet with surrounding lines
+                var contextSnippet = GetContextSnippet(sourceText, lineSpan.StartLinePosition.Line, contextLines);
 
                 var referenceKind = location.IsImplicit ? "Implicit" : "Explicit";
 
@@ -356,7 +397,40 @@ internal class RoslynService(
             }
         }
 
-        return results;
+        // Apply pagination
+        var totalCount = results.Count;
+        var paginatedResults = results
+            .Skip(offset)
+            .Take(maxResults)
+            .ToList();
+
+        var hasMore = offset + paginatedResults.Count < totalCount;
+
+        return new FindReferencesResult(totalCount, hasMore, paginatedResults);
+    }
+
+    private static string GetContextSnippet(SourceText sourceText, int referenceLine, int contextLines)
+    {
+        // Calculate how many lines before and after to include
+        // contextLines=1: just the current line
+        // contextLines=2: 1 before + current
+        // contextLines=3: 1 before + current + 1 after
+        // contextLines=4: 2 before + current + 1 after
+        // etc.
+
+        var linesBefore = (contextLines - 1) / 2;
+        var linesAfter = contextLines - 1 - linesBefore;
+
+        var startLine = Math.Max(0, referenceLine - linesBefore);
+        var endLine = Math.Min(sourceText.Lines.Count - 1, referenceLine + linesAfter);
+
+        var lines = new List<string>();
+        for (var i = startLine; i <= endLine; i++)
+        {
+            lines.Add(sourceText.Lines[i].ToString().TrimEnd());
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     public async Task<DefinitionInfo?> GetDefinitionAsync(

@@ -29,13 +29,15 @@ internal class CodeActionsService(
     private readonly CodeActionFilterConfiguration _filterConfig = filterConfig.Value;
     private readonly ConcurrentDictionary<string, CodeAction> _codeActionCache = new();
 
-    public async Task<IEnumerable<CodeActionInfo>> GetCodeActionsAsync(
+    public async Task<CodeActionsResult> GetCodeActionsAsync(
         string? filePath = null,
         int? line = null,
         int? column = null,
         int? endLine = null,
         int? endColumn = null,
-        IEnumerable<string>? diagnosticIds = null)
+        IEnumerable<string>? diagnosticIds = null,
+        int maxResults = 50,
+        int offset = 0)
     {
         if (workspaceManager.CurrentSolution == null)
         {
@@ -48,7 +50,12 @@ internal class CodeActionsService(
         if (filePath.IsNullOrEmpty())
         {
             logger.LogWarning("File path is required for getting code actions");
-            return actions;
+            return new CodeActionsResult(
+                Actions: Array.Empty<CodeActionInfo>(),
+                TotalCount: 0,
+                ReturnedCount: 0,
+                HasMore: false
+            );
         }
 
         Document? document = null;
@@ -66,7 +73,12 @@ internal class CodeActionsService(
         if (document == null)
         {
             logger.LogWarning("Document not found: {FilePath}", filePath);
-            return actions;
+            return new CodeActionsResult(
+                Actions: Array.Empty<CodeActionInfo>(),
+                TotalCount: 0,
+                ReturnedCount: 0,
+                HasMore: false
+            );
         }
 
         // Determine text span for code actions
@@ -93,7 +105,12 @@ internal class CodeActionsService(
         if (semanticModel == null)
         {
             logger.LogWarning("Could not get semantic model for {FilePath}", filePath);
-            return actions;
+            return new CodeActionsResult(
+                Actions: Array.Empty<CodeActionInfo>(),
+                TotalCount: 0,
+                ReturnedCount: 0,
+                HasMore: false
+            );
         }
 
         var allDiagnostics = semanticModel.GetDiagnostics();
@@ -212,15 +229,32 @@ internal class CodeActionsService(
         // Apply filters to reduce noise
         var filteredActions = ApplyFilters(actions);
 
-        logger.LogInformation("Found {Count} code actions at {FilePath}:{Line} ({FixCount} fixes, {RefactorCount} refactorings, {FilteredCount} after filtering)",
+        // Apply pagination
+        var totalCount = filteredActions.Count;
+        var paginatedActions = filteredActions
+            .Skip(offset)
+            .Take(maxResults)
+            .ToList();
+
+        var returnedCount = paginatedActions.Count;
+        var hasMore = offset + returnedCount < totalCount;
+
+        logger.LogInformation("Found {Count} code actions at {FilePath}:{Line} ({FixCount} fixes, {RefactorCount} refactorings, {FilteredCount} after filtering, returned {ReturnedCount} with offset {Offset})",
             actions.Count,
             filePath,
             line,
             allCodeFixes.Count,
             allRefactorings.Count,
-            filteredActions.Count);
+            filteredActions.Count,
+            returnedCount,
+            offset);
 
-        return filteredActions;
+        return new CodeActionsResult(
+            Actions: paginatedActions,
+            TotalCount: totalCount,
+            ReturnedCount: returnedCount,
+            HasMore: hasMore
+        );
     }
 
     private List<CodeActionInfo> ApplyFilters(List<CodeActionInfo> actions)

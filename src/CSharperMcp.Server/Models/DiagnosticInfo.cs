@@ -9,6 +9,5 @@ internal record DiagnosticInfo(
     int? Column,
     int? EndLine,
     int? EndColumn,
-    string Category,
-    bool HasFix
+    string Category
 );

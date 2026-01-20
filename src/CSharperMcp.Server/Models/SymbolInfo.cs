@@ -10,5 +10,8 @@ internal record SymbolInfo(
     string? DocComment,
     IReadOnlyList<string> Modifiers,
     string? Signature,
-    string? DefinitionLocation
+    bool IsFromWorkspace,
+    string? SourceFile,
+    int? SourceLine,
+    int? SourceColumn
 );
