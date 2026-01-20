@@ -713,11 +713,18 @@ internal class RoslynService(
                 return null;
             }
 
-            // Prepare type name for decompiler
+            // Prepare type name for decompiler (handle generics properly)
             var fullTypeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                .Replace("global::", "")
-                .Replace("<", "`")
-                .Split('`')[0];
+                .Replace("global::", "");
+
+            // Convert generic types from "List<T>" to "List`1" format
+            if (fullTypeName.Contains('<'))
+            {
+                var angleBracketIndex = fullTypeName.IndexOf('<');
+                var genericParams = fullTypeName.Substring(angleBracketIndex + 1, fullTypeName.LastIndexOf('>') - angleBracketIndex - 1)
+                    .Split(',').Length;
+                fullTypeName = fullTypeName.Substring(0, angleBracketIndex) + "`" + genericParams;
+            }
 
             var decompiledSource = decompilerService.DecompileType(assemblyPath, fullTypeName, includeImplementation);
             if (decompiledSource == null)
@@ -728,9 +735,9 @@ internal class RoslynService(
 
             var lineCount = decompiledSource.Split('\n').Length;
 
-            // Determine package name
+            // Determine package name (only for non-BCL assemblies)
             string? package = null;
-            if (assembly.Identity != null && !assembly.Identity.IsRetargetable)
+            if (assemblyName != null && !IsBclAssembly(assemblyName))
             {
                 package = assemblyName;
             }
