@@ -56,9 +56,40 @@ Add to your project's `.mcp.json` or your global MCP configuration:
 }
 ```
 
-**Note:** Use `--workspace-from-cwd` for Claude Code, which automatically uses the current working directory. Variable expansion like `"${workspaceFolder}"` doesn't work reliably with global tool installations.
+**Recommended:** Use `--workspace-from-cwd` which automatically uses the current working directory. This allows the tool to be installed globally and work across all your C# projects without per-project configuration.
+
+**Alternative:** If you need to specify an explicit workspace path, use `--workspace /some/folder`:
+
+```json
+{
+  "mcpServers": {
+    "csharp-er-mcp": {
+      "type": "stdio",
+      "command": "dnx",
+      "args": ["--yes", "CSharperMcp", "--workspace", "/path/to/your/csharp/project"]
+    }
+  }
+}
+```
+
+**Note:** Variable expansion like `"${workspaceFolder}"` doesn't work reliably with Claude Code's global tool installations, which is why `--workspace-from-cwd` is recommended.
 
 ### Using with Cursor
+
+**Recommended:** Use `--workspace-from-cwd` for global installation across all projects:
+
+```json
+{
+  "mcpServers": {
+    "csharp-er-mcp": {
+      "command": "dnx",
+      "args": ["--yes", "CSharperMcp", "--workspace-from-cwd"]
+    }
+  }
+}
+```
+
+**Alternative:** If you need to specify an explicit workspace path, you can use `${workspaceFolder}` variable expansion (this works in Cursor):
 
 ```json
 {
