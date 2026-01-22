@@ -23,7 +23,7 @@ internal static class WorkspaceTool
         {
             return new WorkspaceInitResult(
                 Success: false,
-                Message: $"Workspace already initialized from --workspace parameter: {config.Value.InitialWorkspacePath}. Restart server to change workspace.",
+                Message: $"Workspace already initialized from command-line parameter: {config.Value.InitialWorkspacePath}. Restart server to change workspace.",
                 ProjectCount: 0
             );
         }

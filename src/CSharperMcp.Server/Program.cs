@@ -24,21 +24,25 @@ var userConfigPath = Path.Combine(
 );
 builder.Configuration.AddYamlFile(userConfigPath, optional: true, reloadOnChange: false);
 
-// 2. Project config directory (only if --workspace provided, optional)
-// Parse --workspace parameter to determine project config location
+// 2. Project config directory (only if --workspace or --workspace-from-cwd provided, optional)
+// Parse --workspace parameter or --workspace-from-cwd flag to determine project config location
 string? workspacePath = null;
 for (int i = 0; i < args.Length; i++)
 {
     if (args[i] == "--workspace" && i + 1 < args.Length)
     {
         workspacePath = args[i + 1];
-        if (workspacePath == "$(pwd)" || workspacePath == "${workspaceFolder}")
-        {
-            //shrug
-            workspacePath = Environment.CurrentDirectory;
-        }
         break;
     }
+}
+
+if (
+    (workspacePath == null && args.Any(x => x == "--workspace-from-cwd"))
+    || workspacePath == "$(pwd)" //shrug
+    || workspacePath == "${workspaceFolder}"
+)
+{
+    workspacePath = Environment.CurrentDirectory;
 }
 
 if (workspacePath != null)
@@ -54,7 +58,7 @@ if (workspacePath != null)
         builder.Configuration.AddYamlFile(projectConfigPath, optional: true, reloadOnChange: false);
     }
 
-    // Auto-disable initialize_workspace tool when workspace is provided via --workspace
+    // Auto-disable initialize_workspace tool when workspace is provided via --workspace or --workspace-from-cwd
     builder.Configuration.AddInMemoryCollection(
         new Dictionary<string, string?> { { "tools:initialize_workspace:isEnabled", "false" } }
     );
@@ -177,7 +181,7 @@ mcpServer.AddListToolsFilter(next =>
 
 var app = builder.Build();
 
-// Auto-initialize workspace if --workspace parameter was provided
+// Auto-initialize workspace if --workspace or --workspace-from-cwd was provided
 var workspaceConfig = app.Services.GetRequiredService<IOptions<WorkspaceConfiguration>>().Value;
 if (!workspaceConfig.InitialWorkspacePath.IsNullOrEmpty())
 {
@@ -185,7 +189,7 @@ if (!workspaceConfig.InitialWorkspacePath.IsNullOrEmpty())
     var workspaceManager = app.Services.GetRequiredService<WorkspaceManager>();
 
     logger.LogInformation(
-        "Auto-initializing workspace from --workspace parameter: {Path}",
+        "Auto-initializing workspace from command-line parameter: {Path}",
         workspaceConfig.InitialWorkspacePath
     );
     var (success, message, projectCount) = await workspaceManager.InitializeAsync(

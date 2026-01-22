@@ -48,12 +48,15 @@ Add to your project's `.mcp.json` or your global MCP configuration:
 {
   "mcpServers": {
     "csharp-er-mcp": {
+      "type": "stdio",
       "command": "dnx",
-      "args": ["--yes", "CSharperMcp", "--workspace", "${workspaceFolder}"]
+      "args": ["--yes", "CSharperMcp", "--workspace-from-cwd"]
     }
   }
 }
 ```
+
+**Note:** Use `--workspace-from-cwd` for Claude Code, which automatically uses the current working directory. Variable expansion like `"${workspaceFolder}"` doesn't work reliably with global tool installations.
 
 ### Using with Cursor
 
@@ -61,7 +64,6 @@ Add to your project's `.mcp.json` or your global MCP configuration:
 {
   "mcpServers": {
     "csharp-er-mcp": {
-      "type": "stdio",
       "command": "dnx",
       "args": ["--yes", "CSharperMcp", "--workspace", "${workspaceFolder}"]
     }
@@ -75,17 +77,27 @@ Add to your project's `.mcp.json` or your global MCP configuration:
 dnx --yes CSharperMcp --workspace /path/to/your/project
 ```
 
-### the workspace parameter
+### Workspace Auto-initialization
 
-The `--workspace` parameter tells the server to automatically initialize the specified directory on startup. The server will:
+The server supports two ways to automatically initialize a workspace on startup:
 
+**`--workspace <path>`** - Specify an explicit path to initialize:
+```bash
+dnx --yes CSharperMcp --workspace /path/to/your/project
+```
+
+**`--workspace-from-cwd`** - Use the current working directory:
+```bash
+dnx --yes CSharperMcp --workspace-from-cwd
+```
+
+Both options will:
 1. Look for `.sln` files (prefer one matching directory name, else largest)
 2. Fall back to `.csproj` files if no solution found
 3. Load the workspace and make tools available immediately
+4. Disable the `initialize_workspace` tool (restart the server to change workspaces)
 
-**Without `--workspace`**: You must call the `initialize_workspace` tool manually after connecting.
-
-**With `--workspace`**: The workspace is auto-initialized and the `initialize_workspace` tool is disabled (restart the server to change workspaces).
+**Without either parameter**: You must call the `initialize_workspace` tool manually after connecting.
 
 ### Advanced Configuration with YAML
 
@@ -139,7 +151,7 @@ Load a C# solution or project from a path.
 
 **Returns:** Project count, solution path, any load errors.
 
-**Note:** Disabled when `--workspace` parameter is provided.
+**Note:** Disabled when `--workspace` or `--workspace-from-cwd` is provided.
 
 ---
 
