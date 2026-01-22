@@ -10,54 +10,28 @@ namespace CSharperMcp.Server.Tools;
 internal static class SymbolInfoTool
 {
     [McpServerTool]
-    [Description("Get symbol information at a specific location or by fully qualified name. Like LSP hover - works for variables, methods, types, etc. Returns type, namespace, assembly, package, and signature. Set includeDocumentation=true to get XML doc comments (can be verbose). IMPORTANT: 'assembly' field is always present (project name for workspace symbols, DLL name for BCL/NuGet). 'package' field is only populated for NuGet packages (null for workspace and BCL). For workspace symbols, use SourceFile/SourceLine to navigate to definition. Use either (file + line + column) OR symbolName, not both.")]
+    [Description("Get symbol information at a specific location. Like LSP hover - works for variables, methods, types, etc. Returns type, namespace, assembly, package, and signature. Set includeDocumentation=true to get XML doc comments (can be verbose). IMPORTANT: 'assembly' field is always present (project name for workspace symbols, DLL name for BCL/NuGet). 'package' field is only populated for NuGet packages (null for workspace and BCL). For workspace symbols, use SourceFile/SourceLine to navigate to definition.")]
     public static async Task<string> GetSymbolInfo(
         RoslynService roslynService,
         ILogger<RoslynService> logger,
-        [Description("File path to get symbol from (for location-based lookup). Use with line and column parameters.")] string? file = null,
-        [Description("Line number (1-based) for location-based lookup. Use with file and column parameters.")] int? line = null,
-        [Description("Column number (1-based) for location-based lookup. Use with file and line parameters.")] int? column = null,
-        [Description("Fully qualified symbol name for name-based lookup (e.g. 'System.String' or 'Newtonsoft.Json.Linq.JObject'). Do not use with file/line/column parameters.")] string? symbolName = null,
+        [Description("File path to get symbol from")] string file,
+        [Description("Line number (1-based)")] int line,
+        [Description("Column number (1-based)")] int column,
         [Description("Include XML documentation comments (default false to reduce token usage)")] bool includeDocumentation = false)
     {
         try
         {
-            // Validate mutually exclusive parameters
-            bool hasLocation = file != null && line.HasValue && column.HasValue;
-            bool hasPartialLocation = file != null || line.HasValue || column.HasValue;
-            bool hasSymbolName = !string.IsNullOrEmpty(symbolName);
-
-            // Check for conflicting parameters first (symbolName + any location parameter)
-            if (hasSymbolName && hasPartialLocation)
+            // Validate required parameters
+            if (string.IsNullOrWhiteSpace(file))
             {
                 return JsonSerializer.Serialize(new
                 {
                     success = false,
-                    message = "Provide either (file + line + column) OR symbolName, not both"
+                    message = "file parameter is required"
                 });
             }
 
-            // Check for incomplete location parameters (but only if there's some location info provided)
-            if (hasPartialLocation && !hasLocation && !hasSymbolName)
-            {
-                return JsonSerializer.Serialize(new
-                {
-                    success = false,
-                    message = "When using location-based lookup, you must provide all three parameters: file, line, and column"
-                });
-            }
-
-            // Check for missing parameters entirely
-            if (!hasLocation && !hasSymbolName)
-            {
-                return JsonSerializer.Serialize(new
-                {
-                    success = false,
-                    message = "Must provide either (file + line + column) OR symbolName"
-                });
-            }
-
-            var symbolInfo = await roslynService.GetSymbolInfoAsync(file, line, column, symbolName, includeDocumentation);
+            var symbolInfo = await roslynService.GetSymbolInfoAsync(file, line, column, symbolName: null, includeDocumentation);
 
             if (symbolInfo == null)
             {

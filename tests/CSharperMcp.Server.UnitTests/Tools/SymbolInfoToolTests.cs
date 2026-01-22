@@ -7,18 +7,17 @@ namespace CSharperMcp.Server.UnitTests.Tools;
 
 /// <summary>
 /// Tests for parameter validation in SymbolInfoTool.
-/// These tests verify that the tool correctly validates mutually exclusive parameters.
+/// These tests verify that the tool correctly validates required parameters.
 /// </summary>
 internal class SymbolInfoToolTests
 {
     [Test]
-    public async Task GetSymbolInfo_ShouldReturnError_WhenBothLocationAndSymbolNameProvided()
+    public async Task GetSymbolInfo_ShouldReturnError_WhenFileIsEmpty()
     {
         // Arrange
-        const string file = "/path/to/file.cs";
+        const string file = "";
         const int line = 10;
         const int column = 5;
-        const string symbolName = "System.String";
 
         // Act
         var result = await SymbolInfoTool.GetSymbolInfo(
@@ -26,110 +25,35 @@ internal class SymbolInfoToolTests
             Mock.Of<ILogger<RoslynService>>(),
             file,
             line,
-            column,
-            symbolName);
+            column);
 
         // Assert
         var response = JsonSerializer.Deserialize<JsonElement>(result);
         response.GetProperty("success").GetBoolean().Should().BeFalse();
         response.GetProperty("message").GetString().Should()
-            .Contain("Provide either (file + line + column) OR symbolName, not both");
+            .Contain("file parameter is required");
     }
 
     [Test]
-    public async Task GetSymbolInfo_ShouldReturnError_WhenNeitherLocationNorSymbolNameProvided()
-    {
-        // Act
-        var result = await SymbolInfoTool.GetSymbolInfo(
-            null!,  // Service won't be called due to validation error
-            Mock.Of<ILogger<RoslynService>>());
-
-        // Assert
-        var response = JsonSerializer.Deserialize<JsonElement>(result);
-        response.GetProperty("success").GetBoolean().Should().BeFalse();
-        response.GetProperty("message").GetString().Should()
-            .Contain("Must provide either (file + line + column) OR symbolName");
-    }
-
-    [Test]
-    public async Task GetSymbolInfo_ShouldReturnError_WhenOnlyFileProvided()
+    public async Task GetSymbolInfo_ShouldReturnError_WhenFileIsWhitespace()
     {
         // Arrange
-        const string file = "/path/to/file.cs";
-
-        // Act
-        var result = await SymbolInfoTool.GetSymbolInfo(
-            null!,  // Service won't be called due to validation error
-            Mock.Of<ILogger<RoslynService>>(),
-            file: file);
-
-        // Assert
-        var response = JsonSerializer.Deserialize<JsonElement>(result);
-        response.GetProperty("success").GetBoolean().Should().BeFalse();
-        response.GetProperty("message").GetString().Should()
-            .Contain("When using location-based lookup, you must provide all three parameters");
-    }
-
-    [Test]
-    public async Task GetSymbolInfo_ShouldReturnError_WhenFileAndSymbolNameProvided()
-    {
-        // Arrange
-        const string file = "/path/to/file.cs";
-        const string symbolName = "System.String";
-
-        // Act
-        var result = await SymbolInfoTool.GetSymbolInfo(
-            null!,  // Service won't be called due to validation error
-            Mock.Of<ILogger<RoslynService>>(),
-            file: file,
-            symbolName: symbolName);
-
-        // Assert
-        var response = JsonSerializer.Deserialize<JsonElement>(result);
-        response.GetProperty("success").GetBoolean().Should().BeFalse();
-        response.GetProperty("message").GetString().Should()
-            .Contain("Provide either (file + line + column) OR symbolName, not both");
-    }
-
-    [Test]
-    public async Task GetSymbolInfo_ShouldReturnError_WhenLineAndSymbolNameProvided()
-    {
-        // Arrange
+        const string file = "   ";
         const int line = 10;
-        const string symbolName = "System.String";
-
-        // Act
-        var result = await SymbolInfoTool.GetSymbolInfo(
-            null!,  // Service won't be called due to validation error
-            Mock.Of<ILogger<RoslynService>>(),
-            line: line,
-            symbolName: symbolName);
-
-        // Assert
-        var response = JsonSerializer.Deserialize<JsonElement>(result);
-        response.GetProperty("success").GetBoolean().Should().BeFalse();
-        response.GetProperty("message").GetString().Should()
-            .Contain("Provide either (file + line + column) OR symbolName, not both");
-    }
-
-    [Test]
-    public async Task GetSymbolInfo_ShouldReturnError_WhenColumnAndSymbolNameProvided()
-    {
-        // Arrange
         const int column = 5;
-        const string symbolName = "System.String";
 
         // Act
         var result = await SymbolInfoTool.GetSymbolInfo(
             null!,  // Service won't be called due to validation error
             Mock.Of<ILogger<RoslynService>>(),
-            column: column,
-            symbolName: symbolName);
+            file,
+            line,
+            column);
 
         // Assert
         var response = JsonSerializer.Deserialize<JsonElement>(result);
         response.GetProperty("success").GetBoolean().Should().BeFalse();
         response.GetProperty("message").GetString().Should()
-            .Contain("Provide either (file + line + column) OR symbolName, not both");
+            .Contain("file parameter is required");
     }
 }
