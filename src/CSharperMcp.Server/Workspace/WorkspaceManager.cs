@@ -37,7 +37,7 @@ internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
             var solutionPath = await DiscoverSolutionAsync(path);
             if (solutionPath == null)
             {
-                return (false, $"No .sln or .csproj found at {path}", 0);
+                return (false, $"No .sln, .slnx, or .csproj found at {path}", 0);
             }
 
             logger.LogInformation("Loading solution from {Path}", solutionPath);
@@ -68,8 +68,9 @@ internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
 
     private async Task<string?> DiscoverSolutionAsync(string path)
     {
-        // If path is a .sln file, use it directly
-        if (File.Exists(path) && path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        // If path is a .sln or .slnx file, use it directly
+        if (File.Exists(path) && (path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+                                   path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)))
         {
             return path;
         }
@@ -80,13 +81,16 @@ internal class WorkspaceManager(ILogger<WorkspaceManager> logger) : IDisposable
             return path;
         }
 
-        // If path is a directory, search for .sln files
+        // If path is a directory, search for .sln and .slnx files
         if (Directory.Exists(path))
         {
-            var slnFiles = Directory.GetFiles(path, "*.sln", SearchOption.TopDirectoryOnly);
+            var slnFiles = Directory.GetFiles(path, "*.sln", SearchOption.TopDirectoryOnly)
+                .Concat(Directory.GetFiles(path, "*.slnx", SearchOption.TopDirectoryOnly))
+                .ToArray();
+
             if (slnFiles.Length > 0)
             {
-                // Prefer .sln with same name as directory
+                // Prefer solution file with same name as directory
                 var dirName = Path.GetFileName(path);
                 var matchingSln = slnFiles.FirstOrDefault(f =>
                     Path.GetFileNameWithoutExtension(f).Equals(dirName, StringComparison.OrdinalIgnoreCase));
